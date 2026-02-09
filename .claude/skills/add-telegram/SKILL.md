@@ -144,6 +144,29 @@ import { logger } from "./logger.js";
 
 let bot: Bot | null = null;
 
+/** Store a placeholder message for non-text content (photos, voice, etc.) */
+function storeNonTextMessage(ctx: any, placeholder: string): void {
+  const chatId = `tg:${ctx.chat.id}`;
+  const registeredGroups = getAllRegisteredGroups();
+  if (!registeredGroups[chatId]) return;
+
+  const timestamp = new Date(ctx.message.date * 1000).toISOString();
+  const senderName =
+    ctx.from?.first_name || ctx.from?.username || ctx.from?.id?.toString() || "Unknown";
+  const caption = ctx.message.caption ? ` ${ctx.message.caption}` : "";
+
+  storeChatMetadata(chatId, timestamp);
+  storeMessageDirect({
+    id: ctx.message.message_id.toString(),
+    chat_jid: chatId,
+    sender: ctx.from?.id?.toString() || "",
+    sender_name: senderName,
+    content: `${placeholder}${caption}`,
+    timestamp,
+    is_from_me: false,
+  });
+}
+
 export async function connectTelegram(botToken: string): Promise<void> {
   bot = new Bot(botToken);
 
@@ -240,6 +263,22 @@ export async function connectTelegram(botToken: string): Promise<void> {
     );
   });
 
+  // Handle non-text messages with placeholders so the agent knows something was sent
+  bot.on("message:photo", (ctx) => storeNonTextMessage(ctx, "[Photo]"));
+  bot.on("message:video", (ctx) => storeNonTextMessage(ctx, "[Video]"));
+  bot.on("message:voice", (ctx) => storeNonTextMessage(ctx, "[Voice message]"));
+  bot.on("message:audio", (ctx) => storeNonTextMessage(ctx, "[Audio]"));
+  bot.on("message:document", (ctx) => {
+    const name = ctx.message.document?.file_name || "file";
+    storeNonTextMessage(ctx, `[Document: ${name}]`);
+  });
+  bot.on("message:sticker", (ctx) => {
+    const emoji = ctx.message.sticker?.emoji || "";
+    storeNonTextMessage(ctx, `[Sticker ${emoji}]`);
+  });
+  bot.on("message:location", (ctx) => storeNonTextMessage(ctx, "[Location]"));
+  bot.on("message:contact", (ctx) => storeNonTextMessage(ctx, "[Contact]"));
+
   // Handle errors gracefully
   bot.catch((err) => {
     logger.error({ err: err.message }, "Telegram bot error");
@@ -270,9 +309,17 @@ export async function sendTelegramMessage(
   }
 
   try {
-    // Remove tg: prefix if present
     const numericId = chatId.replace(/^tg:/, "");
-    await bot.api.sendMessage(numericId, text);
+
+    // Telegram has a 4096 character limit per message — split if needed
+    const MAX_LENGTH = 4096;
+    if (text.length <= MAX_LENGTH) {
+      await bot.api.sendMessage(numericId, text);
+    } else {
+      for (let i = 0; i < text.length; i += MAX_LENGTH) {
+        await bot.api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH));
+      }
+    }
     logger.info({ chatId, length: text.length }, "Telegram message sent");
   } catch (err) {
     logger.error({ chatId, err }, "Failed to send Telegram message");
@@ -415,6 +462,24 @@ async function main(): Promise<void> {
 ```
 
 Note: When running alongside WhatsApp, the `connection.open` handler in `connectWhatsApp()` already starts the scheduler, IPC watcher, queue, and message loop — no duplication needed.
+
+5. **Update `getAvailableGroups` function** to include Telegram chats. The current filter only shows WhatsApp groups (`@g.us`). Update it to also include `tg:` chats so the agent can discover and register Telegram chats via IPC:
+
+```typescript
+function getAvailableGroups(): AvailableGroup[] {
+  const chats = getAllChats();
+  const registeredJids = new Set(Object.keys(registeredGroups));
+
+  return chats
+    .filter((c) => c.jid !== '__group_sync__' && (c.jid.endsWith('@g.us') || c.jid.startsWith('tg:')))
+    .map((c) => ({
+      jid: c.jid,
+      name: c.name,
+      lastActivity: c.last_message_time,
+      isRegistered: registeredJids.has(c.jid),
+    }));
+}
+```
 
 ### Step 5: Update Environment
 
@@ -568,8 +633,9 @@ To remove Telegram integration:
 3. Remove `sendTelegramMessage` / `setTelegramTyping` routing from `sendMessage()` and `setTyping()` functions
 4. Remove `connectTelegram()` / `stopTelegram()` calls from `main()`
 5. Remove `TELEGRAM_ONLY` conditional in `main()`
-6. Remove `storeMessageDirect` from `src/db.ts`
-7. Remove Telegram config (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ONLY`) from `src/config.ts`
-8. Remove Telegram registrations from SQLite: `sqlite3 store/messages.db "DELETE FROM registered_groups WHERE jid LIKE 'tg:%'"`
-9. Uninstall: `npm uninstall grammy`
-10. Rebuild: `npm run build && launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
+6. Revert `getAvailableGroups()` filter to only include `@g.us` chats
+7. Remove `storeMessageDirect` from `src/db.ts`
+8. Remove Telegram config (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ONLY`) from `src/config.ts`
+9. Remove Telegram registrations from SQLite: `sqlite3 store/messages.db "DELETE FROM registered_groups WHERE jid LIKE 'tg:%'"`
+10. Uninstall: `npm uninstall grammy`
+11. Rebuild: `npm run build && launchctl kickstart -k gui/$(id -u)/com.nanoclaw`
