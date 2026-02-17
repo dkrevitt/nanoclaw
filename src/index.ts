@@ -11,6 +11,8 @@ import {
   TRIGGER_PATTERN,
 } from './config.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
+import { SlackChannel, isSlackConfigured } from './channels/slack.js';
+import { Channel } from './types.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -48,8 +50,48 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
-let whatsapp: WhatsAppChannel;
+let whatsapp: WhatsAppChannel | null = null;
+let slack: SlackChannel | null = null;
+let channels: Channel[] = [];
+
+// Check if WhatsApp should be enabled (disabled via env var for Slack-only mode)
+function isWhatsAppEnabled(): boolean {
+  return process.env.DISABLE_WHATSAPP !== '1';
+}
 const queue = new GroupQueue();
+
+/**
+ * Send a message to the appropriate channel based on JID.
+ */
+async function sendToChannel(jid: string, text: string): Promise<void> {
+  for (const channel of channels) {
+    if (channel.ownsJid(jid)) {
+      await channel.sendMessage(jid, text);
+      return;
+    }
+  }
+  // Fallback to WhatsApp (if enabled)
+  if (whatsapp) {
+    await whatsapp.sendMessage(jid, text);
+  } else {
+    logger.warn({ jid }, 'No channel found for JID and WhatsApp is disabled');
+  }
+}
+
+/**
+ * Set typing indicator on the appropriate channel.
+ */
+async function setChannelTyping(jid: string, isTyping: boolean): Promise<void> {
+  for (const channel of channels) {
+    if (channel.ownsJid(jid) && channel.setTyping) {
+      await channel.setTyping(jid, isTyping);
+      return;
+    }
+  }
+  if (whatsapp) {
+    await whatsapp.setTyping(jid, isTyping);
+  }
+}
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -161,7 +203,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }, IDLE_TIMEOUT);
   };
 
-  await whatsapp.setTyping(chatJid, true);
+  await setChannelTyping(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
 
@@ -173,7 +215,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        await whatsapp.sendMessage(chatJid, text);
+        await sendToChannel(chatJid, text);
         outputSentToUser = true;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -185,7 +227,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   });
 
-  await whatsapp.setTyping(chatJid, false);
+  await setChannelTyping(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
@@ -353,7 +395,7 @@ async function startMessageLoop(): Promise<void> {
               messagesToSend[messagesToSend.length - 1].timestamp;
             saveState();
             // Show typing indicator while the container processes the piped message
-            whatsapp.setTyping(chatJid, true);
+            setChannelTyping(chatJid, true);
           } else {
             // No active container — enqueue for a new one
             queue.enqueueMessageCheck(chatJid);
@@ -457,21 +499,50 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     await queue.shutdown(10000);
-    await whatsapp.disconnect();
+    for (const channel of channels) {
+      await channel.disconnect();
+    }
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
-  // Create WhatsApp channel
-  whatsapp = new WhatsAppChannel({
-    onMessage: (chatJid, msg) => storeMessage(msg),
-    onChatMetadata: (chatJid, timestamp) => storeChatMetadata(chatJid, timestamp),
-    registeredGroups: () => registeredGroups,
-  });
+  // Create WhatsApp channel (optional - disabled with DISABLE_WHATSAPP=1)
+  if (isWhatsAppEnabled()) {
+    whatsapp = new WhatsAppChannel({
+      onMessage: (chatJid, msg) => storeMessage(msg),
+      onChatMetadata: (chatJid, timestamp) => storeChatMetadata(chatJid, timestamp),
+      registeredGroups: () => registeredGroups,
+    });
+    await whatsapp.connect();
+    channels.push(whatsapp);
+    logger.info('WhatsApp channel enabled');
+  } else {
+    logger.info('WhatsApp disabled (DISABLE_WHATSAPP=1)');
+  }
 
-  // Connect — resolves when first connected
-  await whatsapp.connect();
+  // Optionally connect Slack if configured
+  if (isSlackConfigured()) {
+    slack = new SlackChannel({
+      onMessage: (chatJid, msg) => storeMessage(msg),
+      onChatMetadata: (chatJid, timestamp) => storeChatMetadata(chatJid, timestamp),
+      registeredGroups: () => registeredGroups,
+    });
+    try {
+      await slack.connect();
+      channels.push(slack);
+      logger.info('Slack channel enabled');
+    } catch (err) {
+      logger.error({ err }, 'Failed to connect Slack channel, continuing without it');
+      slack = null;
+    }
+  }
+
+  // Ensure at least one channel is configured
+  if (channels.length === 0) {
+    logger.error('No channels configured. Enable WhatsApp or configure Slack.');
+    process.exit(1);
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
@@ -481,14 +552,14 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) => queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
       const text = formatOutbound(rawText);
-      if (text) await whatsapp.sendMessage(jid, text);
+      if (text) await sendToChannel(jid, text);
     },
   });
   startIpcWatcher({
-    sendMessage: (jid, text) => whatsapp.sendMessage(jid, text),
+    sendMessage: (jid, text) => sendToChannel(jid, text),
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) => whatsapp.syncGroupMetadata(force),
+    syncGroupMetadata: (force) => whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) => writeGroupsSnapshot(gf, im, ag, rj),
   });

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  nanoclaw:
+    build: .
+    container_name: nanoclaw
+    restart: unless-stopped
+    volumes:
+      # Docker socket for spawning agent containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent data
+      - ./data:/app/data
+      - ./groups:/app/groups
+      # WhatsApp auth state
+      - ./store:/app/store
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    # No ports needed - WhatsApp uses outbound connections only
+    # For Slack/Telegram webhooks, uncomment:
+    # ports:
+    #   - "3000:3000"

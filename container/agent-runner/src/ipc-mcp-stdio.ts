@@ -274,6 +274,7 @@ Use available_groups.json to find the JID for a group. The folder name should be
   },
 );
 
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
