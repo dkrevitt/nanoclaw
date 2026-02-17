@@ -1,0 +1,21 @@
+{
+  "name": "tsg-claude-agents",
+  "version": "1.0.0",
+  "description": "Claude agent workflows for TSG Creator Sourcing",
+  "type": "module",
+  "scripts": {
+    "push-to-sheets": "tsx scripts/push-to-sheets.ts",
+    "gmail-oauth-setup": "tsx scripts/gmail-oauth-setup.ts",
+    "draft-emails": "tsx scripts/draft-emails.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "googleapis": "^169.0.0",
+    "open": "^10.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
