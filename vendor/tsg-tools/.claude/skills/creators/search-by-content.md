@@ -35,15 +35,19 @@ Calls `POST /creators/search-by-content` to find creators whose recent posts con
 
 ## API
 
-```typescript
-POST /creators/search-by-content
-{
-  "keywords": ["claude", "cursor", "copilot"],
-  "topicId": "uuid",  // optional
-  "limit": 50
-}
+```bash
+curl -s -X POST "$TSG_API_URL/creators/search-by-content" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keywords": ["claude", "cursor", "copilot"],
+    "topicId": "uuid",
+    "limit": 50
+  }'
+```
 
-Response:
+**Response:**
+```json
 {
   "matches": [
     {

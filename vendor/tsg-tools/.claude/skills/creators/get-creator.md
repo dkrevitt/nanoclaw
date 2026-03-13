@@ -40,10 +40,13 @@ Calls `GET /creators/:id` to fetch complete creator data including enrichment me
 
 ## API
 
-```typescript
-GET /creators/:id
+```bash
+curl -s "$TSG_API_URL/creators/<creator-id>" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
 
-Response:
+**Response:**
+```json
 {
   "id": "uuid",
   "display_name": "John Smith",

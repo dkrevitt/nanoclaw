@@ -36,10 +36,13 @@ Calls `GET /saved-searches?topic_id=<id>` to list all saved search queries for a
 
 ## API
 
-```typescript
-GET /saved-searches?topic_id=<uuid>
+```bash
+curl -s "$TSG_API_URL/saved-searches?topic_id=<uuid>" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
 
-Response:
+**Response:**
+```json
 {
   "saved_searches": [
     {

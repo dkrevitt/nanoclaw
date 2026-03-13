@@ -10,7 +10,7 @@ Create a new topic within a project.
 
 ## What it does
 
-Calls `POST /topics` to create a new topic. Topics organize creator discovery within a project - each topic has its own saved searches and review criteria.
+Calls `POST /topics` to create a new topic. Topics organize creator discovery within a project - each topic has its own saved searches.
 
 ## Parameters
 
@@ -20,7 +20,6 @@ Calls `POST /topics` to create a new topic. Topics organize creator discovery wi
 ## Options
 
 - `--description <desc>`: Topic description
-- `--review-criteria <json>`: Topic-specific review criteria (JSON)
 
 ## Example
 
@@ -34,33 +33,14 @@ Calls `POST /topics` to create a new topic. Topics organize creator discovery wi
 #   Project: Acme Launch
 #
 # Next steps:
-#   1. Set review criteria: /update-topic topic-abc456 --review-criteria '{...}'
-#   2. Add saved searches: /create-saved-search --topic-id topic-abc456 ...
-#   3. Run discovery: /discover-creators --topic-id topic-abc456
+#   1. Add saved searches: /create-saved-search --topic-id topic-abc456 ...
+#   2. Run discovery: /discover-creators --topic-id topic-abc456
 ```
 
-## With review criteria
+## With description
 
 ```bash
-/create-topic --project-id proj-123 --name "AI coding tutorials" --review-criteria '{
-  "must_have": [
-    "Creates coding tutorials or walkthroughs",
-    "Covers AI/ML tools or coding assistants",
-    "Posts at least monthly"
-  ],
-  "nice_to_have": [
-    "Has reviewed similar products",
-    "High engagement on technical content"
-  ],
-  "exclude_if": [
-    "Only covers beginner content",
-    "Focuses on non-coding AI topics"
-  ]
-}'
-
-# Output:
-# Topic created: AI coding tutorials
-# Review criteria set with 3 must_have, 2 nice_to_have, 2 exclude_if
+/create-topic --project-id proj-123 --name "AI coding tutorials" --description "Creators who make tutorials about AI coding agents like Cursor, Claude Code, etc."
 ```
 
 ## API
@@ -70,12 +50,7 @@ POST /topics
 {
   "projectId": "uuid",
   "topic": "Topic Name",
-  "description": "Topic description",
-  "reviewCriteria": {
-    "must_have": [...],
-    "nice_to_have": [...],
-    "exclude_if": [...]
-  }
+  "description": "Topic description"
 }
 
 Response:
@@ -85,7 +60,6 @@ Response:
     "project_id": "uuid",
     "topic": "Topic Name",
     "description": "...",
-    "review_criteria": {...},
     "status": "active",
     "created_at": "..."
   }
@@ -94,10 +68,16 @@ Response:
 
 ## Review Criteria
 
-Topic criteria are combined with project-wide criteria during review:
-- **Global baseline** (hardcoded): 1k+ followers, posted in 30 days, English, US/Europe
-- **Project criteria**: Apply to all topics in project
-- **Topic criteria**: Specific to this topic
+> **Note**: Topic-level `review_criteria` is deprecated. Review criteria should be set at the **project level** only.
+
+To set review criteria for a project:
+```bash
+/update-project <project-id> --review-criteria '{
+  "must_have": ["Posts video content", "3k+ avg views"],
+  "nice_to_have": ["Developer/engineer background"],
+  "exclude_if": ["Company/brand account"]
+}'
+```
 
 ## Related
 

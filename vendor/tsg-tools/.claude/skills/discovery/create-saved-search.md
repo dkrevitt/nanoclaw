@@ -40,13 +40,21 @@ Calls `POST /saved-searches` to create a new search query that can be executed t
 
 ## API
 
-```typescript
-POST /saved-searches
-{
-  "topicId": "uuid",
-  "projectId": "uuid",
-  "searchQuery": "AI coding agent comparison",
-  "platform": "youtube",
-  "searchUrl": "https://..."  // optional
-}
+```bash
+curl -s -X POST "$TSG_API_URL/saved-searches" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic_id": "uuid",
+    "search_query": "AI coding agent comparison",
+    "platform": "youtube",
+    "search_intent": "creator_discovery"
+  }'
 ```
+
+**Request body:**
+- `topic_id` (required): UUID of the topic
+- `search_query` (required): Search query string
+- `platform` (required): `youtube`, `tiktok`, `instagram`, `twitter`, or `newsletter`
+- `search_intent` (optional): `creator_discovery` (default) or `sponsored_content`
+- `search_url` (optional): Reference URL for the search

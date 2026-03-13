@@ -50,21 +50,44 @@ Generate emails, create Gmail drafts, and manage email campaigns with AI-powered
 - Batch AI generation and Gmail draft creation
 - Best for: 10+ creators, personalized at scale
 
-## Campaign Workflow (4 Steps)
+## Campaign Workflow
 
-Campaigns now support **multi-angle pitch selection** where AI chooses the best angle for each creator:
+Two options for assigning pitch angles:
+
+### Option A: Direct Assignment (Single Angle)
+
+Use when you know exactly which angle to use for the entire campaign:
+
+```
+1. Create Campaign & Add Creators
+   └── POST /campaigns + POST /campaigns/:id/creators
+
+2. Assign Angle (Direct)
+   └── POST /campaigns/:id/assign-angle {"pitchAngleId": "angle-id"}
+   └── Assigns the same angle to ALL creators
+   └── Skips AI matching entirely
+   └── Campaign status → angles_ready
+
+3. Generate Drafts
+   └── POST /campaigns/:id/generate
+
+4. Create Gmail Drafts
+   └── POST /campaigns/:id/create-drafts
+```
+
+### Option B: AI-Powered Selection (Multiple Angles)
+
+Use when you want AI to pick the best angle per creator:
 
 ```
 1. Create Campaign & Add Creators
    └── Select multiple pitch angles to make available
-   └── Add creators from topic or by ID
    └── POST /campaigns + POST /campaigns/:id/creators
 
-2. Select Angles (AI-Powered) ← NEW
+2. Select Angles (AI-Powered)
    └── POST /campaigns/:id/select-angles
    └── AI analyzes each creator's content and bio
    └── Selects best pitch angle per creator
-   └── Provides reasoning and relevant post context
 
 3. Review Angles
    └── Use Chrome extension to review AI selections
@@ -73,13 +96,9 @@ Campaigns now support **multi-angle pitch selection** where AI chooses the best 
 
 4. Generate Drafts
    └── POST /campaigns/:id/generate
-   └── Uses per-creator selected angle
-   └── AI generates personalized emails
 
 5. Create Gmail Drafts
    └── POST /campaigns/:id/create-drafts
-   └── Opens in Gmail as drafts
-   └── Send manually from Gmail
 ```
 
 ## Campaign Statuses
@@ -176,7 +195,8 @@ PATCH /campaigns/:id/creators/:creatorId/angle  # Override angle selection
 
 ### Campaign Actions
 ```
-POST /campaigns/:id/select-angles            # Trigger AI angle selection
+POST /campaigns/:id/assign-angle             # Assign ONE angle to ALL creators (skip AI matching)
+POST /campaigns/:id/select-angles            # Trigger AI angle selection (for multi-angle campaigns)
 GET  /campaigns/:id/angle-selection-status   # Poll angle selection progress
 POST /campaigns/:id/generate                 # Generate email drafts
 GET  /campaigns/:id/generation-status        # Poll generation progress

@@ -35,10 +35,21 @@ Calls `GET /creators` with query parameters to list creators filtered by project
 
 ## API
 
-```typescript
-GET /creators?topic_id=<id>&pipeline_status=approved&limit=10
+```bash
+curl -s "$TSG_API_URL/creators?topic_id=<id>&pipeline_status=approved&limit=10" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
 
-Response:
+**Additional query parameters:**
+- `project_id` - Filter by project
+- `contact_status` - Filter by contact status (needs_final_review, not_contacted, drafted, etc.)
+- `platform` - Filter by platform
+- `search` - Text search across name, bio, handle
+- `follower_count_min` / `follower_count_max` - Filter by follower count
+- `offset` - Pagination offset
+
+**Response:**
+```json
 {
   "creators": [...],
   "total": 47

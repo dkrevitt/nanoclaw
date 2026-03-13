@@ -425,7 +425,7 @@ Add another search? [y/n]
 | GET | `/topics?project_id=X` | List topics for project |
 | GET | `/topics/:id` | Get topic with saved searches |
 | POST | `/topics` | Create new topic |
-| PATCH | `/topics/:id` | Update topic (including review_criteria) |
+| PATCH | `/topics/:id` | Update topic name/description/status |
 | POST | `/saved-searches` | Create saved search |
 | GET | `/saved-searches?topic_id=X` | List saved searches |
 | POST | `/creators` | Create/find creator from URL |

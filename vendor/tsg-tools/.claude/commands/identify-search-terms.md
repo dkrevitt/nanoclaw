@@ -66,7 +66,8 @@ When searching for sponsored content, the strategy shifts to finding **sponsorsh
 ### Sponsor Discovery Mode
 - `project_type = 'marketer_search'` on project
 - `represented_creator_id` set on project (the creator we represent)
-- `company_review_criteria` defined on topic (to evaluate brand fit)
+- Project description set (sponsorship thesis — describes ideal sponsor match)
+- `marketer_review_criteria` on project (optional hard filters)
 
 ---
 
@@ -149,14 +150,14 @@ Platforms to search: youtube, tiktok, instagram, twitter, newsletter
 **Sponsor Discovery Mode:**
 ```
 Mode: Sponsor Discovery
-Project: {project.name}
+Sponsorship Thesis: {project.description}
 Represented Creator: {represented_creator.display_name} (@{represented_creator.primary_handle})
 Topic: {topic.topic}
 
-Target Company Profile:
-- Must have: {company_review_criteria.must_have}
-- Nice to have: {company_review_criteria.nice_to_have}
-- Exclude if: {company_review_criteria.exclude_if}
+Hard Filters (from marketer_review_criteria):
+- Must have: {marketer_review_criteria.must_have}
+- Exclude if: {marketer_review_criteria.exclude_if}
+- Industries: {marketer_review_criteria.industries}
 
 Platforms to search: youtube, tiktok, instagram, twitter, newsletter
 ```
@@ -187,16 +188,16 @@ Platforms to search: youtube, tiktok, instagram, twitter, newsletter
 
 **Sponsor Mode - Extract and display:**
 ```
-Project: {project.name}
+Sponsorship Thesis: {project.description}
 Represented Creator: {represented_creator.display_name}
   - Primary Platform: {represented_creator.primary_platform}
   - Followers: {represented_creator.follower_count}
   - Niche: {topic.topic}
 
-Target Company Profile:
-- Must have: {company_review_criteria.must_have}
-- Nice to have: {company_review_criteria.nice_to_have}
-- Exclude if: {company_review_criteria.exclude_if}
+Hard Filters (from marketer_review_criteria):
+- Must have: {marketer_review_criteria.must_have}
+- Exclude if: {marketer_review_criteria.exclude_if}
+- Industries: {marketer_review_criteria.industries}
 
 Platforms to search: youtube, tiktok, instagram, twitter, newsletter
 ```
@@ -1214,7 +1215,7 @@ Next steps:
 ### Sponsor Discovery Mode
 - **No represented_creator_id**: Error - "This project is configured as 'marketer_search' but has no represented creator. Set represented_creator_id on the project first."
 - **Low sponsorship rate in niche**: Warn - "This niche has low sponsorship activity. Consider broadening search terms or trying adjacent niches."
-- **Missing company_review_criteria**: Warn - "No company review criteria set on topic. Searches will be created but brand evaluation may be limited."
+- **Missing project description**: Warn - "No project description (sponsorship thesis) set. Searches will be created but sponsor fit evaluation may be limited."
 
 ---
 

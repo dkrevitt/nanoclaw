@@ -26,15 +26,24 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+// Default timeout for API requests (3 minutes)
+// YouTube/Apify searches can take a while but shouldn't hang forever
+const DEFAULT_TIMEOUT_MS = 180_000;
+
 /**
  * Make an authenticated API request
  */
 async function apiRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
-  body?: any
+  body?: any,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<ApiResponse<T>> {
   const url = `${API_URL}${path}`;
+
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -44,6 +53,7 @@ async function apiRequest<T>(
         'X-API-Key': API_KEY,
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
 
     // Read response as text first, then try to parse as JSON
@@ -69,10 +79,19 @@ async function apiRequest<T>(
 
     return { success: true, data };
   } catch (error: any) {
+    // Handle abort (timeout) specifically
+    if (error.name === 'AbortError') {
+      return {
+        success: false,
+        error: `Request timed out after ${timeoutMs / 1000}s`,
+      };
+    }
     return {
       success: false,
       error: error.message || 'Network error',
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -151,6 +170,80 @@ export interface ExecuteSearchResult {
   };
 }
 
+// Longer timeout for Apify operations (5 minutes)
+const APIFY_TIMEOUT_MS = 300_000;
+
+// ============================================================================
+// Workflows & Pipelines
+// ============================================================================
+
+export interface StartPipelineOptions {
+  projectId: string;
+  topicId: string;
+  savedSearchIds?: string[];
+  config?: {
+    autoReview?: boolean;
+    autoEnrich?: boolean;
+    skipDiscovery?: boolean;
+    snapshotCreatorIds?: string[];
+  };
+}
+
+export interface PipelineResponse {
+  pipelineId: string;
+  executionId: string;
+  status: string;
+  mode?: string;
+}
+
+export async function startPipeline(options: StartPipelineOptions): Promise<ApiResponse<PipelineResponse>> {
+  return apiRequest('POST', '/workflows/start-combined', {
+    projectId: options.projectId,
+    topicId: options.topicId,
+    savedSearchIds: options.savedSearchIds,
+    config: options.config,
+  }, APIFY_TIMEOUT_MS);
+}
+
+export interface WorkflowStatus {
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: {
+    total: number;
+    processed: number;
+    successful: number;
+    failed: number;
+    skipped: number;
+  };
+  currentItem?: any;
+  intermediateResults?: any;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export async function getWorkflowStatus(executionId: string): Promise<ApiResponse<WorkflowStatus>> {
+  return apiRequest('GET', `/workflows/${executionId}/status`);
+}
+
+export async function getPipelineStatus(pipelineId: string): Promise<ApiResponse<any>> {
+  return apiRequest('GET', `/pipelines/${pipelineId}/status`);
+}
+
+export async function cancelWorkflow(executionId: string): Promise<ApiResponse<void>> {
+  return apiRequest('POST', `/workflows/${executionId}/cancel`);
+}
+
+export async function getWorkflowLogs(executionId: string): Promise<ApiResponse<any>> {
+  return apiRequest('GET', `/workflows/${executionId}/logs`);
+}
+
+export async function getWorkflowRecords(executionId: string): Promise<ApiResponse<any>> {
+  return apiRequest('GET', `/workflows/${executionId}/records`);
+}
+
+// ============================================================================
+// Discovery & Search (Legacy synchronous - use startPipeline for async)
+// ============================================================================
+
 export async function executeSearch(
   savedSearchId: string,
   options?: { autoEnrich?: boolean }
@@ -158,7 +251,7 @@ export async function executeSearch(
   return apiRequest('POST', '/apify/execute-search', {
     savedSearchId,
     autoEnrich: options?.autoEnrich ?? true,
-  });
+  }, APIFY_TIMEOUT_MS);
 }
 
 export async function testSearch(
@@ -169,7 +262,7 @@ export async function testSearch(
     savedSearchId,
     dryRun: true,
     maxResults: options?.maxResults,
-  });
+  }, APIFY_TIMEOUT_MS);
 }
 
 // ============================================================================
@@ -541,7 +634,20 @@ Commands:
     --status <status>               Filter by pipeline status
     --limit <n>                     Limit results
 
-  execute-search <searchId>         Execute a saved search
+  start-pipeline                    Start async discovery+review pipeline (recommended)
+    --project-id <id>               Project ID (required)
+    --topic-id <id>                 Topic ID (required)
+    --saved-search-ids <csv>        Comma-separated search IDs (optional)
+    --skip-discovery                Skip discovery, review existing creators only
+    --auto-review                   Enable AI auto-review (default: true)
+
+  workflow-status <executionId>     Get workflow execution status
+  pipeline-status <pipelineId>      Get pipeline status
+  workflow-logs <executionId>       Get workflow logs
+  workflow-records <executionId>    Get workflow records
+  cancel-workflow <executionId>     Cancel a running workflow
+
+  execute-search <searchId>         Execute a saved search (legacy, synchronous)
   test-search <searchId>            Dry-run a search (no save)
 
   internal-discovery                Execute internal discovery
@@ -621,6 +727,72 @@ Environment:
       result = await getCreators(options);
       break;
     }
+
+    case 'start-pipeline': {
+      let projectId = '', topicId = '', savedSearchIds = '';
+      let skipDiscovery = false, autoReview = true;
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
+        if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
+        if (args[i] === '--saved-search-ids' && args[i + 1]) savedSearchIds = args[++i];
+        if (args[i] === '--skip-discovery') skipDiscovery = true;
+        if (args[i] === '--no-auto-review') autoReview = false;
+      }
+      if (!projectId || !topicId) {
+        console.error('Usage: start-pipeline --project-id <id> --topic-id <id> [--saved-search-ids <csv>] [--skip-discovery] [--no-auto-review]');
+        process.exit(1);
+      }
+      result = await startPipeline({
+        projectId,
+        topicId,
+        savedSearchIds: savedSearchIds ? savedSearchIds.split(',').map(s => s.trim()) : undefined,
+        config: {
+          skipDiscovery,
+          autoReview,
+        },
+      });
+      break;
+    }
+
+    case 'workflow-status':
+      if (!args[0]) {
+        console.error('Usage: workflow-status <executionId>');
+        process.exit(1);
+      }
+      result = await getWorkflowStatus(args[0]);
+      break;
+
+    case 'pipeline-status':
+      if (!args[0]) {
+        console.error('Usage: pipeline-status <pipelineId>');
+        process.exit(1);
+      }
+      result = await getPipelineStatus(args[0]);
+      break;
+
+    case 'workflow-logs':
+      if (!args[0]) {
+        console.error('Usage: workflow-logs <executionId>');
+        process.exit(1);
+      }
+      result = await getWorkflowLogs(args[0]);
+      break;
+
+    case 'workflow-records':
+      if (!args[0]) {
+        console.error('Usage: workflow-records <executionId>');
+        process.exit(1);
+      }
+      result = await getWorkflowRecords(args[0]);
+      break;
+
+    case 'cancel-workflow':
+      if (!args[0]) {
+        console.error('Usage: cancel-workflow <executionId>');
+        process.exit(1);
+      }
+      result = await cancelWorkflow(args[0]);
+      break;
 
     case 'execute-search':
       if (!args[0]) {

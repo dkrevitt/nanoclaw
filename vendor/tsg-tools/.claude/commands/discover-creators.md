@@ -1,111 +1,264 @@
 # /discover-creators
 
-Discovers creators for a topic from TWO sources:
-1. **Existing database** - Searches creators we already have by content keywords
-2. **External platforms** - Runs Apify searches to find new creators
+Discovers creators for a topic using Inngest-orchestrated pipelines. This is the primary command for automated creator sourcing.
 
-Both sources create `creator_reviews` records with `action='pending_review'` to link creators to the topic for later review.
+Uses `POST /workflows/start-combined` with Inngest for:
+- Parallel search execution across platforms
+- Automatic retries on failures
+- Pipeline progress tracking
+- Proper serverless support (Vercel)
 
 ## Usage
 
-```
+```bash
 /discover-creators --project-id <uuid> --topic-id <uuid>
-/discover-creators --project-id <uuid>                    # All topics in project
-/discover-creators --project-id <uuid> --topic-id <uuid> --skip-db        # Skip existing DB search
-/discover-creators --project-id <uuid> --topic-id <uuid> --skip-external  # Skip Apify searches
-/discover-creators --project-id <uuid> --topic-id <uuid> --force          # Force re-run all searches
+/discover-creators --project-id <uuid> --topic-id <uuid> --saved-search-ids <id1,id2>
+/discover-creators --project-id <uuid> --topic-id <uuid> --skip-discovery
+/discover-creators --project-id <uuid> --topic-id <uuid> --dry-run
 ```
 
-**Arguments:**
-- `--project-id <uuid>` - Required. Project ID
-- `--topic-id <uuid>` - Optional. If omitted, runs for all topics in project
-- `--skip-db` - Skip searching existing database
-- `--skip-external` - Skip running Apify external searches
-- `--skip-recent-days <N>` - Skip external searches executed within last N days (default: 3)
-- `--force` - Force re-run ALL external searches, ignoring `last_executed_at`
+**Required Arguments:**
+- `--project-id <uuid>` - Project ID
+- `--topic-id <uuid>` - Topic ID
+
+**Optional Arguments:**
+- `--saved-search-ids <id1,id2,...>` - Comma-separated list of specific saved searches to run
+- `--skip-discovery` - Skip discovery, only run review on existing creators
+- `--no-auto-review` - Do not auto-chain to review after discovery
+- `--dry-run` - Show what would happen without executing
 
 ## Workflow Steps
 
-### Step 0: Fetch Topic and Saved Searches
+### Step 1: Validate Inputs
 
 ```bash
-# Get topic with saved searches
+# Verify project and topic exist
+npx tsx src/utils/api.ts project $PROJECT_ID
 npx tsx src/utils/api.ts topic $TOPIC_ID
 
-# Or get all topics for a project
-npx tsx src/utils/api.ts topics $PROJECT_ID
+# List available saved searches
+npx tsx src/utils/api.ts saved-searches --topic-id $TOPIC_ID
 ```
 
-### Step 1: Execute Saved Searches
+Display summary:
+```
+=== Pipeline Setup ===
+Project: Kilo Code
+Topic: AI model coding benchmarks (12 saved searches)
 
-For each saved search that hasn't been run recently (or use `--force` to re-run all):
+Saved searches to run:
+├── YouTube: "AI coding agent comparison" (last run: 3 days ago)
+├── YouTube: "claude vs gpt benchmark" (last run: never)
+├── TikTok: "cursor ai tutorial" (last run: 5 days ago)
+└── ... (9 more)
+
+Review criteria: ✅ Set
+```
+
+### Step 2: Start Pipeline
 
 ```bash
-# Execute a search - backend handles discovery + enrichment + pending_review creation
-npx tsx src/utils/api.ts execute-search $SEARCH_ID
+# Via API utility (when available)
+npx tsx src/utils/api.ts start-pipeline \
+  --project-id $PROJECT_ID \
+  --topic-id $TOPIC_ID \
+  --saved-search-ids $SEARCH_IDS
+
+# Or via curl
+curl -X POST "$TSG_API_URL/workflows/start-combined" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"projectId\": \"$PROJECT_ID\",
+    \"topicId\": \"$TOPIC_ID\",
+    \"savedSearchIds\": [$SEARCH_IDS],
+    \"config\": {
+      \"autoReview\": true
+    }
+  }"
 ```
 
-**What the backend does automatically:**
-1. Runs discovery:
-   - YouTube, Instagram, TikTok, Twitter → Apify search actors
-   - Newsletter/Substack (Substack, Beehiiv, Ghost, ConvertKit, Buttondown) → Tavily web search + LLM filtering
-2. Creates/updates creator records with deduplication
-3. Creates `creator_reviews` with `action='pending_review'` for each creator+topic
-4. Performs Tier 2 enrichment:
-   - Social platforms: follower counts, recent posts via Apify
-   - Newsletters: Extracts social handles from page HTML
-5. Updates `saved_search_ids[]` on creators
+**Response:**
+```json
+{
+  "pipelineId": "pipeline-uuid",
+  "executionId": "discovery-execution-uuid",
+  "status": "running"
+}
+```
 
-### Step 2: Summary
+## Pipeline Automation
 
-After running searches, display:
-- How many saved searches were executed vs skipped
-- How many new creators were discovered
-- How many creators are now pending review
-- Suggested next command: `/review-creators --project-id X --topic-id Y`
-
-## Example Output
+When `autoReview: true` is set, the pipeline automatically runs:
 
 ```
-=== Discovering creators for project "Kilo Code" ===
+Discovery (Apify searches) → Tier 2 Enrichment → AI Pre-Review
+```
 
-Topic 1/3: AI model coding benchmarks
-├── Saved searches: 13 (YouTube: 3, TikTok: 4, Instagram: 3, Twitter: 3)
+**IMPORTANT: Do NOT manually call `/workflows/review` when autoReview is enabled.**
+This will create duplicate reviews. The pipeline handles review automatically after enrichment completes.
 
-Running external searches (8 to run, 5 skipped as recent)...
-  "Claude vs GPT coding" on youtube...
-    ✓ 12 new creators, 3 updated
-    ✓ 15 enriched, 0 failed
+**When to manually trigger review:**
+- Pipeline completed but review step shows "pending" (rare edge case)
+- You ran discovery with `autoReview: false` and want to review later
+- Re-reviewing creators after changing review criteria
 
-  "#claudecode" on instagram...
-    ✓ 8 new creators, 2 updated
-    ✓ 10 enriched, 0 failed
+**Review uses PROJECT-level criteria only.**
+Topic-level `review_criteria` is deprecated and ignored by AI review. Update project criteria if needed:
 
-  ... 6 more searches
+```bash
+curl -X PATCH "$TSG_API_URL/projects/$PROJECT_ID" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"reviewCriteria": {"must_have": [...], "exclude_if": [...], "nice_to_have": [...]}}'
+```
 
-=== Summary ===
-Topic: AI model coding benchmarks
-├── New discoveries: 45
-├── Total pending_review: 68
-└── Next: /review-creators --project-id <id> --topic-id <id>
+### Step 3: Monitor Progress
+
+Poll the pipeline status endpoint:
+
+```bash
+curl "$TSG_API_URL/pipelines/$PIPELINE_ID/status" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
+
+Display progress:
+```
+=== Pipeline Progress ===
+Status: in_progress
+Current Step: discovery
+
+Steps:
+├── ✅ search_terms: completed (15/15)
+├── 🔄 discovery: running (5/10) - Searching TikTok...
+├── ⏳ review: pending
+└── ⏳ campaign: pending
+
+Discovered so far: 47 creators
+```
+
+### Step 4: Completion
+
+When pipeline completes:
+
+```
+=== Pipeline Complete ===
+Status: completed
+
+Results:
+├── Discovery: 47 creators found
+├── Review: 12 approved (24%), 35 skipped
+└── Ready for outreach: 12 creators
+
+Next steps:
+1. View approved creators: /check-projects --project-id <uuid>
+2. Create email campaign: /run-campaign --project-id <uuid> --topic-id <uuid>
+3. View in Chrome extension: Projects → Kilo Code → AI model coding benchmarks
+```
+
+## Review-Only Mode
+
+Run `--skip-discovery` to review existing creators without running new discovery:
+
+```bash
+/discover-creators --project-id <uuid> --topic-id <uuid> --saved-search-ids <ids> --skip-discovery
+```
+
+This will:
+1. Snapshot creators currently associated with the specified saved searches
+2. Skip the discovery step
+3. Run AI review on the snapshotted creators
+4. Update `creator_project_statuses` with review results
+
+**Use cases:**
+- Re-review creators after updating review criteria
+- Review creators discovered manually or via internal search
+- Run review on a subset of creators from specific searches
+
+## Dry Run Mode
+
+Preview what would happen without executing:
+
+```bash
+/discover-creators --project-id <uuid> --topic-id <uuid> --dry-run
+```
+
+Output:
+```
+=== Dry Run Preview ===
+Would execute pipeline with:
+├── 12 saved searches (5 YouTube, 4 TikTok, 3 Instagram)
+├── Estimated creators to discover: ~150-300
+├── Auto-review: enabled
+└── Review criteria: ✅ Set
+
+No changes made (dry run mode).
 ```
 
 ## API Endpoints Used
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/topics/:topicId` | Get topic with saved searches |
-| GET | `/topics?project_id=<id>` | List topics for project |
-| POST | `/apify/execute-search` | Execute saved search (auto-enriches) |
+| POST | `/workflows/start-combined` | Start discovery+review pipeline |
+| GET | `/pipelines/:id/status` | Poll pipeline progress |
+| GET | `/pipelines/:id` | Get full pipeline details |
+| GET | `/workflows/:id/records` | Get created records |
+| POST | `/pipelines/:id/cancel` | Cancel running pipeline |
 
-## Notes
+## Pipeline States
 
-- **Deduplication**: Same creator in multiple searches only gets one pending_review per topic
-- **Existing reviews preserved**: Won't overwrite approved/skipped reviews
-- **Incremental**: Safe to run multiple times - only processes new/changed data
-- **Cost-efficient**: External searches have Apify costs (~$0.50 per search)
+| State | Meaning |
+|-------|---------|
+| `in_progress` | Pipeline is running |
+| `completed` | All steps finished successfully |
+| `failed` | A step failed (check error details) |
+| `cancelled` | User cancelled the pipeline |
+
+## Step States
+
+| State | Meaning |
+|-------|---------|
+| `pending` | Not yet started |
+| `running` | Currently executing |
+| `completed` | Finished successfully |
+| `failed` | Step failed |
+| `cancelled` | Step was cancelled |
+
+## Error Handling
+
+If discovery fails:
+```
+=== Pipeline Error ===
+Status: failed
+Failed Step: discovery
+Error: [APIFY_RATE_LIMIT] Rate limit exceeded
+
+Options:
+1. Wait and retry: /discover-creators --project-id <uuid> --topic-id <uuid>
+2. Cancel: POST /pipelines/<id>/cancel
+3. Run remaining searches individually
+```
+
+If review fails:
+```
+=== Pipeline Error ===
+Status: failed
+Failed Step: review
+Error: [ANTHROPIC_ERROR] API timeout
+
+Discovery completed with 47 creators.
+Options:
+1. Retry review only: /discover-creators --project-id <uuid> --topic-id <uuid> --skip-discovery
+2. Manual review via Chrome extension
+```
 
 ## Related Commands
 
-- `/identify-search-terms` - Find good search queries before running discovery
-- `/review-creators` - Evaluate pending_review creators and approve/skip
+- `/check-projects` - View project status and creator counts
+- `/identify-search-terms` - Generate search terms before discovery
+- `/draft-emails` - Create email drafts for approved creators
+- `/run-campaign` - Start email campaign for approved creators
+
+## Related Skills
+
+- See `skills/workflows.md` for individual workflow API calls

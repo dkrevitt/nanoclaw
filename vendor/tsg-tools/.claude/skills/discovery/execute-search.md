@@ -37,10 +37,16 @@ Calls `POST /apify/execute-search` to run a saved search query. Automatically tr
 
 ## API
 
-```typescript
-POST /apify/execute-search
-{
-  "savedSearchId": "uuid",
-  "autoEnrich": true  // default
-}
+```bash
+curl -s -X POST "$TSG_API_URL/apify/execute-search" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "savedSearchId": "uuid",
+    "autoEnrich": true
+  }'
 ```
+
+**Request body:**
+- `savedSearchId` (required): UUID of the saved search to execute
+- `autoEnrich` (optional, default: `true`): Run Tier 2 enrichment automatically

@@ -5,7 +5,7 @@ Enrich a single creator with platform data.
 ## Usage
 
 ```
-/enrich-creator <creator-id> [--tier <tier>]
+/enrich-creator <creator-id> [--tier <tier>] [--include-email]
 ```
 
 ## What it does
@@ -18,14 +18,17 @@ Calls `POST /creators/:id/enrich` to fetch additional data for a creator from pl
 
 ## Options
 
-- `--tier preliminary|full`: Enrichment level (default: preliminary)
-  - `preliminary` (Tier 2): Apify - follower counts, recent posts, engagement
-  - `full` (Tier 3): influencers.club - cross-platform handles, demographics, email
+- `--tier 2|3`: Enrichment level (default: 2)
+  - `2` (Tier 2): Follower counts, recent posts, engagement
+  - `3` (Tier 3): Cross-platform handles, full profile data
+- `--include-email`: Also run email enrichment waterfall
+
+**Note:** Provider is configurable via env vars (default: Apify for both tiers). influencers.club available as fallback.
 
 ## Example
 
 ```bash
-/enrich-creator abc123-def456 --tier full
+/enrich-creator abc123-def456 --tier 3
 
 # Output:
 # Enriching @johnsmith (YouTube)...
@@ -38,9 +41,34 @@ Calls `POST /creators/:id/enrich` to fetch additional data for a creator from pl
 
 ## API
 
-```typescript
-POST /creators/:id/enrich
+**Request body (all fields optional):**
+```json
 {
-  "tier": "full"  // or "preliminary"
+  "tier": 2,           // 2 or 3 (default: 2)
+  "includeEmail": false,  // Run email enrichment after profile (default: false)
+  "force": false          // Skip staleness check (default: false)
 }
 ```
+
+```bash
+# Tier 2 (default)
+curl -s -X POST "$TSG_API_URL/creators/<creator-id>/enrich" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json"
+
+# Tier 3
+curl -s -X POST "$TSG_API_URL/creators/<creator-id>/enrich" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tier": 3}'
+
+# Tier 3 + email enrichment, force refresh
+curl -s -X POST "$TSG_API_URL/creators/<creator-id>/enrich" \
+  -H "X-API-Key: $TSG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tier": 3, "includeEmail": true, "force": true}'
+```
+
+**Legacy query params (still supported):**
+- `?tier=full|preliminary` - Maps to tier 3|2
+- `?force=true` - Skip staleness check

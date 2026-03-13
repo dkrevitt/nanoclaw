@@ -181,7 +181,6 @@ function buildVolumeMounts(
   // Mount TSG tools for content-biz group
   // This provides access to TSG backend API utilities via bash
   if (group.folder === 'content-biz') {
-    const projectRoot = process.cwd();
     const tsgToolsPath = path.join(projectRoot, 'vendor/tsg-tools');
     if (fs.existsSync(tsgToolsPath)) {
       mounts.push({

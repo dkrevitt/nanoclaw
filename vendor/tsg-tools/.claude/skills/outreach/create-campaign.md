@@ -153,7 +153,30 @@ Response:
 }
 ```
 
-### Select Angles (AI-Powered)
+### Assign Angle (Direct - Single Angle)
+
+Use this when you know exactly which angle to use. Skips AI matching entirely.
+
+```typescript
+POST /campaigns/:id/assign-angle
+{
+  "pitchAngleId": "angle-kiloclaw"
+}
+
+Response:
+{
+  "success": true,
+  "updated": 88,
+  "errors": 0,
+  "total": 88,
+  "pitchAngle": { "id": "angle-kiloclaw", "name": "KiloClaw launch" },
+  "message": "Assigned \"KiloClaw launch\" to 88 creators"
+}
+```
+
+### Select Angles (AI-Powered - Multiple Angles)
+
+Use when you want AI to pick the best angle per creator from multiple options.
 
 ```typescript
 POST /campaigns/:id/select-angles

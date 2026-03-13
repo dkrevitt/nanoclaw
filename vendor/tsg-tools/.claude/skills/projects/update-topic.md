@@ -1,6 +1,6 @@
 # /update-topic
 
-Update a topic's name, description, or review criteria.
+Update a topic's name, description, or status.
 
 ## Usage
 
@@ -20,36 +20,9 @@ Calls `PATCH /topics/:id` to update topic settings. Requires member role or high
 
 - `--name <name>`: Update topic name
 - `--description <desc>`: Update description
-- `--review-criteria <json>`: Set topic-specific review criteria
 - `--status <status>`: Set status (active/paused/completed)
 
 ## Examples
-
-### Update review criteria
-
-```bash
-/update-topic topic-123 --review-criteria '{
-  "must_have": [
-    "Creates AI/coding content",
-    "Has reviewed developer tools",
-    "Posts video content weekly"
-  ],
-  "nice_to_have": [
-    "Has 50k+ subscribers",
-    "High engagement (>5% rate)",
-    "Active on multiple platforms"
-  ],
-  "exclude_if": [
-    "Only does sponsored content",
-    "Primarily entertainment/gaming focus",
-    "Hasnt posted in 30+ days"
-  ]
-}'
-
-# Output:
-# Topic updated: AI coding tutorials
-# Review criteria: 3 must_have, 3 nice_to_have, 3 exclude_if
-```
 
 ### Update name and description
 
@@ -74,11 +47,6 @@ PATCH /topics/:id
 {
   "topic": "Updated Name",
   "description": "Updated description",
-  "reviewCriteria": {
-    "must_have": [...],
-    "nice_to_have": [...],
-    "exclude_if": [...]
-  },
   "status": "active"
 }
 
@@ -89,33 +57,25 @@ Response:
     "project_id": "uuid",
     "topic": "...",
     "description": "...",
-    "review_criteria": {...},
     "status": "active",
     "updated_at": "..."
   }
 }
 ```
 
-## Review Criteria Guidelines
+## Review Criteria
 
-Write criteria in plain English - Claude interprets them during review:
+> **Note**: Topic-level `review_criteria` is deprecated. AI pre-review uses **project-level criteria only**.
 
-**Good criteria:**
-- "Creates tutorial or educational content"
-- "Has reviewed similar products in the past"
-- "Engagement rate above 3%"
-- "Posts at least weekly"
+To update review criteria, use `/update-project` instead:
 
-**Bad criteria:**
-- "Good creator" (too vague)
-- "follower_count > 10000" (use plain English instead)
-
-**Hierarchy:**
-1. Global baseline (hardcoded) - applies to all
-2. Project criteria - applies to all topics in project
-3. Topic criteria - specific to this topic
-
-All three levels are combined during `/review-creators`.
+```bash
+/update-project <project-id> --review-criteria '{
+  "must_have": ["Creates AI/coding content", "Posts video content"],
+  "nice_to_have": ["50k+ subscribers", "High engagement"],
+  "exclude_if": ["Company/brand account", "Inactive 30+ days"]
+}'
+```
 
 ## Topic Statuses
 
@@ -130,4 +90,3 @@ All three levels are combined during `/review-creators`.
 - Get topic: `/get-topic`
 - Create topic: `/create-topic`
 - Update project criteria: `/update-project`
-- Review creators: `/review-creators` command

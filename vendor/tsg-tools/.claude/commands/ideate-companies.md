@@ -41,8 +41,8 @@ All three paths produce the same output: enriched companies + marketers stored i
 ## Prerequisites
 
 1. **marketer_search project exists**: Create with `project_type: 'marketer_search'`
-2. **Represented creator linked** (optional but recommended): Links the creator we're finding sponsors for
-3. **Topic with company_review_criteria**: Helps AI understand target company profile
+2. **Project description set**: This is the sponsorship thesis — describes the ideal sponsor match
+3. **Represented creator linked** (optional but recommended): Links the creator we're finding sponsors for
 4. **Apollo API key**: Set `APOLLO_API_KEY` in `tsg-extension-backend/.env`
 5. **Backend running**: `cd tsg-extension-backend && npm run dev`
 6. **Inngest dev server**: `npx inngest-cli@latest dev -u http://localhost:3000/api/inngest`
@@ -52,13 +52,9 @@ All three paths produce the same output: enriched companies + marketers stored i
 ### Step 0: Validate Prerequisites
 
 ```bash
-# Check project is marketer_search type
+# Check project has description (sponsorship thesis) and is marketer_search type
 curl -s "$TSG_API_URL/projects/$PROJECT_ID" \
-  -H "X-API-Key: $TSG_API_KEY" | jq '{type: .project.project_type, represented_creator: .project.represented_creator_id}'
-
-# Check topics have company_review_criteria
-curl -s "$TSG_API_URL/topics?project_id=$PROJECT_ID" \
-  -H "X-API-Key: $TSG_API_KEY" | jq '.topics[] | {topic: .topic, criteria: .company_review_criteria}'
+  -H "X-API-Key: $TSG_API_KEY" | jq '{type: .project.project_type, description: .project.description, represented_creator: .project.represented_creator_id, criteria: .project.marketer_review_criteria}'
 ```
 
 ### Step 1: Trigger Company Ideation Workflow
@@ -114,9 +110,9 @@ curl -s "$TSG_API_URL/topics/$TOPIC_ID/saved-searches?search_intent=sponsored_co
 ## What the Workflow Does
 
 1. **Gather Context**:
-   - Fetch project details and represented creator
-   - Get topics with company_review_criteria
-   - List existing companies in project (to avoid duplicates)
+   - Fetch project details (description = sponsorship thesis) and represented creator
+   - Get topics and marketer_review_criteria (hard filters)
+   - List existing companies in project (to avoid duplicates, plus sponsorship history as reference)
 
 2. **AI Research** (Claude):
    - Analyze creator niche, audience, and content style
@@ -219,7 +215,7 @@ curl -s "$TSG_API_URL/projects/$PROJECT_ID" \
 
 **No companies ideated:**
 - Check that represented creator has bio/niche info
-- Ensure topic has company_review_criteria set
+- Ensure project has a description (sponsorship thesis)
 
 **Apollo API not working:**
 ```bash

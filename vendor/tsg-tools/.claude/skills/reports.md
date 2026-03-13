@@ -78,6 +78,27 @@ If post data is stale:
 - Use `--refresh` flag to update
 - Or run Tier 2 enrichment via `/batch-enrich`
 
+## Export Reports
+
+### Creator Report (nested by topic)
+```bash
+curl -s "$TSG_API_URL/reports/creators/<project-id>?action=approved" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
+
+**Query parameters:**
+- `action` - Filter by review action: `approved`, `skipped`, or `all`
+- `topic_id` - Filter by specific topic
+- `format` - `json` (default) or `csv`
+
+### Flat Creator Report (for Google Sheets)
+```bash
+curl -s "$TSG_API_URL/reports/creators/<project-id>/flat?action=approved" \
+  -H "X-API-Key: $TSG_API_KEY"
+```
+
+Returns pipe-separated arrays and separate profile link columns for direct Google Sheets import.
+
 ## API Endpoints Used
 
 | Endpoint | Purpose |
@@ -85,6 +106,8 @@ If post data is stale:
 | `GET /projects/:id` | Get project name |
 | `GET /creators?project_id=X` | Fetch creators with posts |
 | `POST /creators/batch-refresh-posts` | Refresh post data |
+| `GET /reports/creators/:projectId` | Export creator report (nested) |
+| `GET /reports/creators/:projectId/flat` | Export flat report for Sheets |
 
 ## Related Commands
 
