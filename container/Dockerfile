@@ -58,6 +58,9 @@ RUN printf '#!/bin/bash\nset -e\ncd /app && npx tsc --outDir /tmp/dist 2>&1 >&2\
 # Set ownership to node user (non-root) for writable directories
 RUN chown -R node:node /workspace
 
+# Create Claude SDK config directory (needed for debug logs)
+RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
+
 # Switch to non-root user (required for --dangerously-skip-permissions)
 USER node
 

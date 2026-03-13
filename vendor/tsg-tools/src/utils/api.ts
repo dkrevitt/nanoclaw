@@ -46,7 +46,19 @@ async function apiRequest<T>(
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const data = await response.json();
+    // Read response as text first, then try to parse as JSON
+    // This handles cases where the backend returns plain text errors
+    const text = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Response was not JSON - likely a plain text error from upstream service
+      return {
+        success: false,
+        error: text.slice(0, 500) || `HTTP ${response.status}: Non-JSON response`,
+      };
+    }
 
     if (!response.ok) {
       return {
