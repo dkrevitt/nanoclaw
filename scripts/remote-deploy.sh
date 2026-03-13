@@ -59,6 +59,7 @@ tar czf /tmp/nanoclaw-deploy.tar.gz \
     --exclude='logs' \
     --exclude='groups/*/logs' \
     --exclude='groups/*/conversations' \
+    --exclude='groups/*/workspace' \
     .
 
 # Upload to server
@@ -112,6 +113,11 @@ echo "Building agent container..."
 mkdir -p /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 chown -R 1000:1000 /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 
+# Ensure workspace directories exist (preserved across deploys)
+for group_dir in /opt/nanoclaw/groups/*/; do
+    mkdir -p "\${group_dir}workspace"
+done
+
 # Create systemd service with environment variables
 cat > /etc/systemd/system/nanoclaw.service << 'SERVICEEOF'
 [Unit]
@@ -159,9 +165,91 @@ systemctl daemon-reload
 systemctl enable nanoclaw
 systemctl restart nanoclaw
 
+# === Git sync setup for agent learnings ===
+echo ""
+echo "Setting up git sync for agent learnings..."
+
+# Generate deploy key if not exists
+DEPLOY_KEY="/root/.ssh/nanoclaw_deploy_key"
+if [ ! -f "\$DEPLOY_KEY" ]; then
+    echo "Generating deploy key..."
+    ssh-keygen -t ed25519 -f "\$DEPLOY_KEY" -N "" -C "nanoclaw-deploy@\$(hostname)"
+    echo ""
+    echo "=================================================="
+    echo "DEPLOY KEY GENERATED - ADD TO GITHUB"
+    echo "=================================================="
+    echo "Add this key to: https://github.com/dkrevitt/nanoclaw/settings/keys"
+    echo "Enable 'Allow write access' checkbox"
+    echo ""
+    cat "\${DEPLOY_KEY}.pub"
+    echo ""
+    echo "=================================================="
+fi
+
+# Configure SSH to use deploy key for github
+cat > /root/.ssh/config << 'SSHEOF'
+Host github.com
+    IdentityFile /root/.ssh/nanoclaw_deploy_key
+    StrictHostKeyChecking accept-new
+SSHEOF
+chmod 600 /root/.ssh/config
+
+# Initialize git repo if needed
+cd /opt/nanoclaw
+git config --global --add safe.directory /opt/nanoclaw
+if [ ! -d .git ]; then
+    echo "Initializing git repository..."
+    git init
+    git remote add origin git@github.com:dkrevitt/nanoclaw.git
+fi
+
+# Configure git user for commits
+git config user.email "nanoclaw@$(hostname)"
+git config user.name "NanoClaw Agent"
+
+# Ensure remote uses SSH
+git remote set-url origin git@github.com:dkrevitt/nanoclaw.git || true
+
+# Make sync script executable
+chmod +x /opt/nanoclaw/scripts/sync-learnings.sh
+
+# Create systemd timer for hourly sync
+cat > /etc/systemd/system/nanoclaw-sync.service << 'SYNCSERVICEEOF'
+[Unit]
+Description=Sync NanoClaw agent learnings to git
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/nanoclaw
+ExecStart=/opt/nanoclaw/scripts/sync-learnings.sh
+User=root
+Environment=HOME=/root
+SYNCSERVICEEOF
+
+cat > /etc/systemd/system/nanoclaw-sync.timer << 'SYNCTIMEREOF'
+[Unit]
+Description=Run NanoClaw sync hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+SYNCTIMEREOF
+
+# Enable and start timer
+systemctl daemon-reload
+systemctl enable nanoclaw-sync.timer
+systemctl start nanoclaw-sync.timer
+
 echo ""
 echo "=== Deployment complete ==="
 echo "View logs: journalctl -u nanoclaw -f"
+echo "Sync timer: systemctl status nanoclaw-sync.timer"
 REMOTE_SCRIPT
 
 echo ""
