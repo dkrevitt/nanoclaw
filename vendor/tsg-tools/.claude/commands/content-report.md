@@ -351,7 +351,7 @@ To generate the full report:
 
 - `/check-projects` - View project and creator status before running report
 - `/discover-creators` - Add more creators to the project
-- `/run-pipeline` - Run discovery + review workflow
+- `/discover-creators` - Run discovery + review workflow
 
 ---
 

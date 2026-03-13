@@ -204,6 +204,8 @@ function readSecrets(): Record<string, string> {
     'ANTHROPIC_API_KEY',
     'TSG_BACKEND_URL',
     'TSG_API_KEY',
+    'APIFY_TOKEN',
+    'APIFY_DAILY_BUDGET',
   ]);
 }
 

@@ -1,14 +1,11 @@
 /**
- * TSG Backend API Utilities
+ * TSG Backend API Utilities (Storage Only)
  *
- * Standardized API calls for the creator discovery workflows.
- * Handles authentication, error handling, and response parsing.
+ * CRUD operations for projects, topics, and creators.
+ * All workflow logic (search, enrichment, review) lives in NanoClaw.
  *
  * Usage from shell:
  *   npx tsx src/utils/api.ts <command> [args...]
- *
- * Usage from TypeScript:
- *   import { getTopics, executeSearch } from './utils/api.js';
  */
 
 // Load environment variables
@@ -26,22 +23,19 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-// Default timeout for API requests (3 minutes)
-// YouTube/Apify searches can take a while but shouldn't hang forever
-const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
  * Make an authenticated API request
  */
 async function apiRequest<T>(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
   path: string,
   body?: any,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<ApiResponse<T>> {
   const url = `${API_URL}${path}`;
 
-  // Create abort controller for timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -56,14 +50,11 @@ async function apiRequest<T>(
       signal: controller.signal,
     });
 
-    // Read response as text first, then try to parse as JSON
-    // This handles cases where the backend returns plain text errors
     const text = await response.text();
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      // Response was not JSON - likely a plain text error from upstream service
       return {
         success: false,
         error: text.slice(0, 500) || `HTTP ${response.status}: Non-JSON response`,
@@ -79,7 +70,6 @@ async function apiRequest<T>(
 
     return { success: true, data };
   } catch (error: any) {
-    // Handle abort (timeout) specifically
     if (error.name === 'AbortError') {
       return {
         success: false,
@@ -103,7 +93,6 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  review_criteria?: any;
 }
 
 export interface Topic {
@@ -111,20 +100,6 @@ export interface Topic {
   project_id: string;
   name: string;
   description?: string;
-  review_criteria?: any;
-  saved_searches?: SavedSearch[];
-}
-
-export interface SavedSearch {
-  id: string;
-  topic_id: string;
-  project_id: string;
-  search_query: string;
-  platform: string;
-  search_url?: string;
-  last_executed_at?: string;
-  last_execution_status?: string;
-  last_execution_result_count?: number;
 }
 
 export async function getProjects(): Promise<ApiResponse<{ projects: Project[] }>> {
@@ -143,130 +118,8 @@ export async function getTopic(topicId: string): Promise<ApiResponse<Topic>> {
   return apiRequest('GET', `/topics/${topicId}`);
 }
 
-export async function getSavedSearches(topicId: string): Promise<ApiResponse<{ saved_searches: SavedSearch[] }>> {
-  return apiRequest('GET', `/saved-searches?topic_id=${topicId}`);
-}
-
 // ============================================================================
-// Discovery & Search
-// ============================================================================
-
-export interface ExecuteSearchResult {
-  savedSearch: {
-    id: string;
-    search_query: string;
-    platform: string;
-  };
-  results: {
-    discovered: number;
-    skipped: number;
-    discoveries: any[];
-  };
-  execution: any;
-  enrichment?: {
-    requested: number;
-    succeeded: number;
-    failed: number;
-  };
-}
-
-// Longer timeout for Apify operations (5 minutes)
-const APIFY_TIMEOUT_MS = 300_000;
-
-// ============================================================================
-// Workflows & Pipelines
-// ============================================================================
-
-export interface StartPipelineOptions {
-  projectId: string;
-  topicId: string;
-  savedSearchIds?: string[];
-  config?: {
-    autoReview?: boolean;
-    autoEnrich?: boolean;
-    skipDiscovery?: boolean;
-    snapshotCreatorIds?: string[];
-  };
-}
-
-export interface PipelineResponse {
-  pipelineId: string;
-  executionId: string;
-  status: string;
-  mode?: string;
-}
-
-export async function startPipeline(options: StartPipelineOptions): Promise<ApiResponse<PipelineResponse>> {
-  return apiRequest('POST', '/workflows/start-combined', {
-    projectId: options.projectId,
-    topicId: options.topicId,
-    savedSearchIds: options.savedSearchIds,
-    config: options.config,
-  }, APIFY_TIMEOUT_MS);
-}
-
-export interface WorkflowStatus {
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  progress: {
-    total: number;
-    processed: number;
-    successful: number;
-    failed: number;
-    skipped: number;
-  };
-  currentItem?: any;
-  intermediateResults?: any;
-  errorCode?: string;
-  errorMessage?: string;
-}
-
-export async function getWorkflowStatus(executionId: string): Promise<ApiResponse<WorkflowStatus>> {
-  return apiRequest('GET', `/workflows/${executionId}/status`);
-}
-
-export async function getPipelineStatus(pipelineId: string): Promise<ApiResponse<any>> {
-  return apiRequest('GET', `/pipelines/${pipelineId}/status`);
-}
-
-export async function cancelWorkflow(executionId: string): Promise<ApiResponse<void>> {
-  return apiRequest('POST', `/workflows/${executionId}/cancel`);
-}
-
-export async function getWorkflowLogs(executionId: string): Promise<ApiResponse<any>> {
-  return apiRequest('GET', `/workflows/${executionId}/logs`);
-}
-
-export async function getWorkflowRecords(executionId: string): Promise<ApiResponse<any>> {
-  return apiRequest('GET', `/workflows/${executionId}/records`);
-}
-
-// ============================================================================
-// Discovery & Search (Legacy synchronous - use startPipeline for async)
-// ============================================================================
-
-export async function executeSearch(
-  savedSearchId: string,
-  options?: { autoEnrich?: boolean }
-): Promise<ApiResponse<ExecuteSearchResult>> {
-  return apiRequest('POST', '/apify/execute-search', {
-    savedSearchId,
-    autoEnrich: options?.autoEnrich ?? true,
-  }, APIFY_TIMEOUT_MS);
-}
-
-export async function testSearch(
-  savedSearchId: string,
-  options?: { maxResults?: number }
-): Promise<ApiResponse<any>> {
-  return apiRequest('POST', '/apify/test-execute', {
-    savedSearchId,
-    dryRun: true,
-    maxResults: options?.maxResults,
-  }, APIFY_TIMEOUT_MS);
-}
-
-// ============================================================================
-// Creators
+// Creators (CRUD)
 // ============================================================================
 
 export interface Creator {
@@ -278,24 +131,8 @@ export interface Creator {
   follower_count?: number;
   engagement_rate?: number;
   pipeline_status: string;
-  enrichment_tier: number;
   recent_posts?: any[];
   enrichment_metadata?: any;
-  saved_search_ids?: string[];
-
-  // Tier 2 enrichment (Apify preliminary)
-  tier2_status?: 'pending' | 'in_progress' | 'success' | 'failed';
-  tier2_metadata?: Record<string, any>;
-  tier2_enriched_at?: string;
-  tier2_error?: string;
-  tier2_api_response?: Record<string, any>;
-
-  // Tier 3 enrichment (influencers.club full)
-  tier3_status?: 'pending' | 'in_progress' | 'success' | 'failed';
-  tier3_metadata?: Record<string, any>;
-  tier3_enriched_at?: string;
-  tier3_error?: string;
-  tier3_api_response?: Record<string, any>;
 }
 
 export interface GetCreatorsOptions {
@@ -305,7 +142,6 @@ export interface GetCreatorsOptions {
   platform?: string;
   limit?: number;
   offset?: number;
-  excludeReviewedForTopic?: string;
 }
 
 export async function getCreators(options: GetCreatorsOptions = {}): Promise<ApiResponse<{ creators: Creator[]; total: number }>> {
@@ -316,7 +152,6 @@ export async function getCreators(options: GetCreatorsOptions = {}): Promise<Api
   if (options.platform) params.append('platform', options.platform);
   if (options.limit) params.append('limit', options.limit.toString());
   if (options.offset) params.append('offset', options.offset.toString());
-  if (options.excludeReviewedForTopic) params.append('exclude_reviewed_for_topic', options.excludeReviewedForTopic);
 
   const queryString = params.toString();
   return apiRequest('GET', `/creators${queryString ? `?${queryString}` : ''}`);
@@ -326,54 +161,26 @@ export async function getCreator(creatorId: string): Promise<ApiResponse<Creator
   return apiRequest('GET', `/creators/${creatorId}`);
 }
 
-export async function searchCreatorsByContent(
-  keywords: string[],
-  options?: {
-    projectId?: string;
-    topicId?: string;
-    platform?: string;
-    minFollowers?: number;
-    limit?: number;
-    dryRun?: boolean;
-  }
-): Promise<ApiResponse<{
-  matches: any[];
-  total: number;
-  linked: number;
-  alreadyLinked: number;
-}>> {
-  return apiRequest('POST', '/creators/search-by-content', {
-    keywords,
-    projectId: options?.projectId,
-    topicId: options?.topicId,
-    platform: options?.platform,
-    minFollowers: options?.minFollowers,
-    limit: options?.limit || 50,
-    dryRun: options?.dryRun || false,
-  });
+export interface CreateCreatorOptions {
+  primary_platform: string;
+  primary_handle: string;
+  display_name?: string;
+  bio?: string;
+  follower_count?: number;
+  profile_url?: string;
+  avatar_url?: string;
+  enrichment_metadata?: any;
 }
 
-// ============================================================================
-// Internal Discovery
-// ============================================================================
-
-export interface InternalDiscoveryResult {
-  discovered: number;
-  linkedToProject: number;
-  alreadyLinked: number;
-  message: string;
+export async function createCreator(options: CreateCreatorOptions): Promise<ApiResponse<Creator>> {
+  return apiRequest('POST', '/creators', options);
 }
 
-export async function executeInternalDiscovery(options: {
-  savedSearchId: string;
-  projectId: string;
-  topicId?: string;
-}): Promise<ApiResponse<InternalDiscoveryResult>> {
-  return apiRequest('POST', '/internal-discovery/execute', {
-    savedSearchId: options.savedSearchId,
-    projectId: options.projectId,
-    topicId: options.topicId,
-  });
+export async function updateCreator(
+  creatorId: string,
+  updates: Partial<CreateCreatorOptions>
+): Promise<ApiResponse<Creator>> {
+  return apiRequest('PATCH', `/creators/${creatorId}`, updates);
 }
 
 // ============================================================================
@@ -386,12 +193,7 @@ export interface SubmitReviewOptions {
   topicId: string;
   action: 'approved' | 'skipped' | 'pending_review';
   reviewFeedback: string;
-  reviewerType?: 'human' | 'agent'; // Who made the review (defaults to 'agent' for CLI)
-  savedPosts?: Array<{
-    post_url: string;
-    post_title?: string;
-    relevance_note?: string;
-  }>;
+  reviewerType?: 'human' | 'agent';
 }
 
 export async function submitReview(options: SubmitReviewOptions): Promise<ApiResponse<any>> {
@@ -400,8 +202,7 @@ export async function submitReview(options: SubmitReviewOptions): Promise<ApiRes
     topicId: options.topicId,
     action: options.action,
     reviewFeedback: options.reviewFeedback,
-    reviewerType: options.reviewerType || 'agent', // Default to 'agent' for CLI/agent usage
-    savedPosts: options.savedPosts,
+    reviewerType: options.reviewerType || 'agent',
   });
 }
 
@@ -418,193 +219,17 @@ export async function getCreatorReviews(
 }
 
 // ============================================================================
-// Enrichment
+// Link Creator to Project
 // ============================================================================
 
-export async function enrichCreator(
+export async function linkCreatorToProject(
   creatorId: string,
-  tier: 'preliminary' | 'full' = 'preliminary'
+  projectId: string,
+  topicId?: string
 ): Promise<ApiResponse<any>> {
-  return apiRequest('POST', `/creators/${creatorId}/enrich`, { tier });
-}
-
-export async function batchEnrichCreators(
-  creatorIds: string[],
-  tier: 'preliminary' | 'full' = 'preliminary'
-): Promise<ApiResponse<any>> {
-  const endpoint = tier === 'full' ? '/creators/batch-enrich-full' : '/creators/batch-enrich';
-  return apiRequest('POST', endpoint, { creatorIds });
-}
-
-// ============================================================================
-// Saved Searches Management
-// ============================================================================
-
-export interface CreateSavedSearchOptions {
-  topicId: string;
-  projectId: string;
-  searchQuery: string;
-  platform: string;
-  searchUrl?: string;
-}
-
-export async function createSavedSearch(options: CreateSavedSearchOptions): Promise<ApiResponse<SavedSearch>> {
-  return apiRequest('POST', '/saved-searches', {
-    topicId: options.topicId,
-    projectId: options.projectId,
-    searchQuery: options.searchQuery,
-    platform: options.platform,
-    searchUrl: options.searchUrl,
-  });
-}
-
-export async function deleteSavedSearch(searchId: string): Promise<ApiResponse<void>> {
-  return apiRequest('DELETE', `/saved-searches/${searchId}`);
-}
-
-// ============================================================================
-// Content Items (Proposals)
-// ============================================================================
-
-export interface ContentItem {
-  id: string;
-  project_id: string;
-  topic_id: string | null;
-  creator_id: string;
-  name: string;
-  description: string | null;
-  format: string;
-  platform: string | null;
-  cost: number | null;
-  target_cpm: number | null;
-  target_impressions: number | null;
-  sow_link: string | null;
-  launch_date: string | null;
-  published_url: string | null;
-  actual_views: number | null;
-  actual_likes: number | null;
-  actual_comments: number | null;
-  status: string;
-  post_quantity: number | null;
-  proposal_source: string | null;
-  proposal_raw_text: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  creator?: Creator;
-}
-
-export interface CreateContentItemOptions {
-  projectId: string;
-  topicId?: string;
-  creatorId: string;
-  name: string;
-  description?: string;
-  format: string;
-  platform?: string;
-  cost?: number;
-  targetCpm?: number;
-  targetImpressions?: number;
-  sowLink?: string;
-  launchDate?: string;
-  status?: string;
-  postQuantity?: number;
-  proposalSource?: string;
-  proposalRawText?: string;
-}
-
-export async function getContentItem(contentItemId: string): Promise<ApiResponse<{ contentItem: ContentItem }>> {
-  return apiRequest('GET', `/content-items/${contentItemId}`);
-}
-
-export async function getContentItems(options: {
-  projectId?: string;
-  topicId?: string;
-  creatorId?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<ApiResponse<{ contentItems: ContentItem[]; total: number }>> {
-  const params = new URLSearchParams();
-  if (options.projectId) params.append('project_id', options.projectId);
-  if (options.topicId) params.append('topic_id', options.topicId);
-  if (options.creatorId) params.append('creator_id', options.creatorId);
-  if (options.status) params.append('status', options.status);
-  if (options.limit) params.append('limit', options.limit.toString());
-  if (options.offset) params.append('offset', options.offset.toString());
-
-  const queryString = params.toString();
-  return apiRequest('GET', `/content-items${queryString ? `?${queryString}` : ''}`);
-}
-
-export async function createContentItem(options: CreateContentItemOptions): Promise<ApiResponse<{ contentItem: ContentItem }>> {
-  return apiRequest('POST', '/content-items', {
-    projectId: options.projectId,
-    topicId: options.topicId,
-    creatorId: options.creatorId,
-    name: options.name,
-    description: options.description,
-    format: options.format,
-    platform: options.platform,
-    cost: options.cost,
-    targetCpm: options.targetCpm,
-    targetImpressions: options.targetImpressions,
-    sowLink: options.sowLink,
-    launchDate: options.launchDate,
-    status: options.status || 'planned',
-    postQuantity: options.postQuantity,
-    proposalSource: options.proposalSource,
-    proposalRawText: options.proposalRawText,
-  });
-}
-
-export async function updateContentItem(
-  contentItemId: string,
-  updates: Partial<CreateContentItemOptions>
-): Promise<ApiResponse<{ contentItem: ContentItem }>> {
-  return apiRequest('PUT', `/content-items/${contentItemId}`, updates);
-}
-
-// ============================================================================
-// Recent Posts (Extended Post History for ROI Analysis)
-// ============================================================================
-
-export interface RecentPost {
-  post_id?: string;
-  post_url?: string;
-  created_at?: string;
-  caption?: string;
-  hashtags?: string[];
-  engagement?: {
-    likes?: number;
-    comments?: number;
-    views?: number;
-    shares?: number;
-  };
-  platform?: string;
-  is_sponsored?: boolean;
-  sponsorship_signals?: string[];
-}
-
-export async function getRecentPosts(
-  creatorId: string,
-  options: { limit?: number; sponsoredOnly?: boolean } = {}
-): Promise<ApiResponse<{ posts: RecentPost[]; total: number; sponsoredCount: number }>> {
-  const params = new URLSearchParams();
-  if (options.limit) params.append('limit', options.limit.toString());
-  if (options.sponsoredOnly) params.append('sponsored_only', 'true');
-
-  const queryString = params.toString();
-  return apiRequest('GET', `/creators/${creatorId}/recent-posts${queryString ? `?${queryString}` : ''}`);
-}
-
-export async function fetchExtendedPosts(
-  creatorId: string,
-  options: { maxDaysBack?: number; maxPosts?: number } = {}
-): Promise<ApiResponse<{ success: boolean; postsFound: number; postsUpserted: number; sponsoredCount: number }>> {
-  return apiRequest('POST', `/creators/${creatorId}/fetch-extended-posts`, {
-    maxDaysBack: options.maxDaysBack || 365,
-    maxPosts: options.maxPosts || 100,
+  return apiRequest('POST', `/creators/${creatorId}/link`, {
+    projectId,
+    topicId,
   });
 }
 
@@ -617,7 +242,7 @@ async function main() {
 
   if (!command) {
     console.log(`
-TSG API CLI
+TSG API CLI (Storage Only)
 
 Usage: npx tsx src/utils/api.ts <command> [args...]
 
@@ -625,8 +250,7 @@ Commands:
   projects                          List all projects
   project <id>                      Get project details
   topics <projectId>                List topics for a project
-  topic <id>                        Get topic details with saved searches
-  searches <topicId>                List saved searches for a topic
+  topic <id>                        Get topic details
 
   creators [options]                List creators
     --project-id <id>               Filter by project
@@ -634,35 +258,18 @@ Commands:
     --status <status>               Filter by pipeline status
     --limit <n>                     Limit results
 
-  start-pipeline                    Start async discovery+review pipeline (recommended)
-    --project-id <id>               Project ID (required)
-    --topic-id <id>                 Topic ID (required)
-    --saved-search-ids <csv>        Comma-separated search IDs (optional)
-    --skip-discovery                Skip discovery, review existing creators only
-    --auto-review                   Enable AI auto-review (default: true)
+  creator <id>                      Get single creator
 
-  workflow-status <executionId>     Get workflow execution status
-  pipeline-status <pipelineId>      Get pipeline status
-  workflow-logs <executionId>       Get workflow logs
-  workflow-records <executionId>    Get workflow records
-  cancel-workflow <executionId>     Cancel a running workflow
+  create-creator                    Create a new creator
+    --platform <platform>           Primary platform (required)
+    --handle <handle>               Primary handle (required)
+    --name <name>                   Display name
+    --bio <bio>                     Bio text
+    --followers <n>                 Follower count
 
-  execute-search <searchId>         Execute a saved search (legacy, synchronous)
-  test-search <searchId>            Dry-run a search (no save)
-
-  internal-discovery                Execute internal discovery
-    --saved-search-id <id>          Saved search ID (required)
+  link-creator <creatorId>          Link creator to project
     --project-id <id>               Project ID (required)
     --topic-id <id>                 Topic ID (optional)
-
-  search-by-content                 Search creators by keywords
-    --keywords <csv>                Comma-separated keywords (required)
-    --project-id <id>               Project ID (required)
-    --topic-id <id>                 Topic ID (required)
-    --platform <name>               Filter by platform (optional)
-    --min-followers <n>             Minimum follower count (optional)
-    --limit <n>                     Max results (default: 50)
-    --dry-run                       Preview without linking (optional)
 
   review <creatorId>                Submit a review
     --project-id <id>               Project ID (required)
@@ -708,14 +315,6 @@ Environment:
       result = await getTopic(args[0]);
       break;
 
-    case 'searches':
-      if (!args[0]) {
-        console.error('Usage: searches <topicId>');
-        process.exit(1);
-      }
-      result = await getSavedSearches(args[0]);
-      break;
-
     case 'creators': {
       const options: GetCreatorsOptions = {};
       for (let i = 0; i < args.length; i++) {
@@ -728,150 +327,69 @@ Environment:
       break;
     }
 
-    case 'start-pipeline': {
-      let projectId = '', topicId = '', savedSearchIds = '';
-      let skipDiscovery = false, autoReview = true;
+    case 'creator':
+      if (!args[0]) {
+        console.error('Usage: creator <id>');
+        process.exit(1);
+      }
+      result = await getCreator(args[0]);
+      break;
+
+    case 'create-creator': {
+      let platform = '', handle = '', name = '', bio = '';
+      let followers = 0;
       for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
-        if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
-        if (args[i] === '--saved-search-ids' && args[i + 1]) savedSearchIds = args[++i];
-        if (args[i] === '--skip-discovery') skipDiscovery = true;
-        if (args[i] === '--no-auto-review') autoReview = false;
-      }
-      if (!projectId || !topicId) {
-        console.error('Usage: start-pipeline --project-id <id> --topic-id <id> [--saved-search-ids <csv>] [--skip-discovery] [--no-auto-review]');
-        process.exit(1);
-      }
-      result = await startPipeline({
-        projectId,
-        topicId,
-        savedSearchIds: savedSearchIds ? savedSearchIds.split(',').map(s => s.trim()) : undefined,
-        config: {
-          skipDiscovery,
-          autoReview,
-        },
-      });
-      break;
-    }
-
-    case 'workflow-status':
-      if (!args[0]) {
-        console.error('Usage: workflow-status <executionId>');
-        process.exit(1);
-      }
-      result = await getWorkflowStatus(args[0]);
-      break;
-
-    case 'pipeline-status':
-      if (!args[0]) {
-        console.error('Usage: pipeline-status <pipelineId>');
-        process.exit(1);
-      }
-      result = await getPipelineStatus(args[0]);
-      break;
-
-    case 'workflow-logs':
-      if (!args[0]) {
-        console.error('Usage: workflow-logs <executionId>');
-        process.exit(1);
-      }
-      result = await getWorkflowLogs(args[0]);
-      break;
-
-    case 'workflow-records':
-      if (!args[0]) {
-        console.error('Usage: workflow-records <executionId>');
-        process.exit(1);
-      }
-      result = await getWorkflowRecords(args[0]);
-      break;
-
-    case 'cancel-workflow':
-      if (!args[0]) {
-        console.error('Usage: cancel-workflow <executionId>');
-        process.exit(1);
-      }
-      result = await cancelWorkflow(args[0]);
-      break;
-
-    case 'execute-search':
-      if (!args[0]) {
-        console.error('Usage: execute-search <searchId>');
-        process.exit(1);
-      }
-      result = await executeSearch(args[0]);
-      break;
-
-    case 'test-search':
-      if (!args[0]) {
-        console.error('Usage: test-search <searchId>');
-        process.exit(1);
-      }
-      result = await testSearch(args[0]);
-      break;
-
-    case 'internal-discovery': {
-      let savedSearchId = '', projectId = '', topicId = '';
-      for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--saved-search-id' && args[i + 1]) savedSearchId = args[++i];
-        if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
-        if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
-      }
-      if (!savedSearchId || !projectId) {
-        console.error('Usage: internal-discovery --saved-search-id <id> --project-id <id> [--topic-id <id>]');
-        process.exit(1);
-      }
-      result = await executeInternalDiscovery({
-        savedSearchId,
-        projectId,
-        topicId: topicId || undefined,
-      });
-      break;
-    }
-
-    case 'search-by-content': {
-      let keywords = '', projectId = '', topicId = '', platform = '';
-      let minFollowers = 0, limit = 50, dryRun = false;
-      for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--keywords' && args[i + 1]) keywords = args[++i];
-        if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
-        if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
         if (args[i] === '--platform' && args[i + 1]) platform = args[++i];
-        if (args[i] === '--min-followers' && args[i + 1]) minFollowers = parseInt(args[++i]);
-        if (args[i] === '--limit' && args[i + 1]) limit = parseInt(args[++i]);
-        if (args[i] === '--dry-run') dryRun = true;
+        if (args[i] === '--handle' && args[i + 1]) handle = args[++i];
+        if (args[i] === '--name' && args[i + 1]) name = args[++i];
+        if (args[i] === '--bio' && args[i + 1]) bio = args[++i];
+        if (args[i] === '--followers' && args[i + 1]) followers = parseInt(args[++i]);
       }
-      if (!keywords || !projectId || !topicId) {
-        console.error('Usage: search-by-content --keywords <csv> --project-id <id> --topic-id <id> [options]');
+      if (!platform || !handle) {
+        console.error('Usage: create-creator --platform <platform> --handle <handle> [--name <name>] [--bio <bio>] [--followers <n>]');
         process.exit(1);
       }
-      result = await searchCreatorsByContent(
-        keywords.split(',').map(k => k.trim()),
-        {
-          projectId,
-          topicId,
-          platform: platform || undefined,
-          minFollowers: minFollowers || undefined,
-          limit,
-          dryRun,
-        }
-      );
+      result = await createCreator({
+        primary_platform: platform,
+        primary_handle: handle,
+        display_name: name || undefined,
+        bio: bio || undefined,
+        follower_count: followers || undefined,
+      });
+      break;
+    }
+
+    case 'link-creator': {
+      if (!args[0]) {
+        console.error('Usage: link-creator <creatorId> --project-id <id> [--topic-id <id>]');
+        process.exit(1);
+      }
+      const creatorId = args[0];
+      let projectId = '', topicId = '';
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
+        if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
+      }
+      if (!projectId) {
+        console.error('Missing required: --project-id');
+        process.exit(1);
+      }
+      result = await linkCreatorToProject(creatorId, projectId, topicId || undefined);
       break;
     }
 
     case 'review': {
       if (!args[0]) {
-        console.error('Usage: review <creatorId> --project-id <id> --topic-id <id> --action <action> --feedback <text> [--reviewer-type human|agent]');
+        console.error('Usage: review <creatorId> --project-id <id> --topic-id <id> --action <action> --feedback <text>');
         process.exit(1);
       }
       const creatorId = args[0];
-      let projectId = '', topicId = '', action = '', feedback = '', reviewerType = '';
+      let projectId = '', topicId = '', action = '', feedback = '';
       for (let i = 1; i < args.length; i++) {
         if (args[i] === '--project-id' && args[i + 1]) projectId = args[++i];
         if (args[i] === '--topic-id' && args[i + 1]) topicId = args[++i];
         if (args[i] === '--action' && args[i + 1]) action = args[++i];
         if (args[i] === '--feedback' && args[i + 1]) feedback = args[++i];
-        if (args[i] === '--reviewer-type' && args[i + 1]) reviewerType = args[++i];
       }
       if (!projectId || !topicId || !action) {
         console.error('Missing required options: --project-id, --topic-id, --action');
@@ -883,7 +401,6 @@ Environment:
         topicId,
         action: action as 'approved' | 'skipped' | 'pending_review',
         reviewFeedback: feedback,
-        reviewerType: (reviewerType as 'human' | 'agent') || undefined, // defaults to 'agent' in submitReview
       });
       break;
     }

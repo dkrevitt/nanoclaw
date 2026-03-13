@@ -146,7 +146,7 @@ Top matches:
 3. @techreview (12k followers) - "cursor" in recent post
 
 Next steps:
-- Run AI review: /run-pipeline --project-id <id> --skip-discovery
+- Run AI review: /discover-creators --project-id <id> --skip-discovery
 - View creators: /check-projects --project-id <id>
 ```
 
@@ -193,7 +193,7 @@ Linking to project...
 === Next Steps ===
 
 Run AI review (skip discovery since we just added from database):
-  /run-pipeline --project-id abc123 --topic-id def456 --skip-discovery
+  /discover-creators --project-id abc123 --topic-id def456 --skip-discovery
 
 View project status:
   /check-projects --project-id abc123
@@ -235,5 +235,5 @@ Internal saved searches:
 ## Related Commands
 
 - `/discover-creators` - Find NEW creators via external platforms (Apify)
-- `/run-pipeline` - Full discovery + review pipeline
+- `/discover-creators` - Full discovery + review pipeline
 - `/check-projects` - View project status and creator counts

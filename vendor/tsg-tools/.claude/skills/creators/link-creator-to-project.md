@@ -62,7 +62,7 @@ Creators:
   - Gadget Guy (@gadgetguy) → linked
 
 Next steps:
-  1. Run pipeline: /run-pipeline --project-id proj789
+  1. Run pipeline: /discover-creators --project-id proj789 --skip-discovery
   2. Check status: /list-creators --project-id proj789
 ```
 

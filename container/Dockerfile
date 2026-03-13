@@ -47,6 +47,13 @@ COPY agent-runner/ ./
 # Build TypeScript
 RUN npm run build
 
+# Copy and build Apify MCP server
+COPY mcp-servers/apify/package*.json /app/mcp-servers/apify/
+RUN cd /app/mcp-servers/apify && npm install
+
+COPY mcp-servers/apify/ /app/mcp-servers/apify/
+RUN cd /app/mcp-servers/apify && npm run build
+
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
