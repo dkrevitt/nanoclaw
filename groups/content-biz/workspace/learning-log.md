@@ -1,59 +1,92 @@
-# Learning Log
+# Discovery Learning Log
 
-Document patterns observed and adjustments made from review analysis and discovery loops.
+Append-only log of discovery insights across all projects.
 
 ---
 
-## Entry Format
+## Template
 
-Entries are added automatically by `/discovery-loop` and `/learn` commands.
+```
+## {date} - {project}
 
-```markdown
-### YYYY-MM-DD - Project Name (Discovery Loop #N or /learn)
+**Searches:** {n} queries, {platforms}
+**Results:** {discovered} found, {approved} approved ({rate}%)
 
-**Reviews:** X total (Y approved, Z skipped, W flagged) - X% approval rate
+### What Worked
+- ...
 
-**Search performance:**
-- "query A" (platform): X% approval ⭐ high performer
-- "query B" (platform): X% approval (average)
-- "query C" (platform): X% approval ⚠️ underperformer
+### What Didn't Work
+- ...
 
-**Metric patterns:**
-- Approved median followers: Xk vs skipped: Yk
-- Approved median engagement: X% vs skipped: Y%
-- Platform efficiency: YouTube X%, TikTok Y%, Instagram Z%
-
-**Cross-platform:** Found X/Y creators on other platforms
-
-**Actions taken:**
-- [x] Action completed with details
-- [ ] Action pending/suggested for follow-up
-
-**Insights:**
-- Key observation about what works
-- Pattern that should inform future searches
-- Threshold recommendations
-
-**Next steps:**
-- Scheduled next loop: date/time
-- Pending human reviews: X creators
+### Adjustments Made
+- ...
 ```
 
 ---
 
-## Loop History
+## 2026-03-13 - Kilo Code (Manual Discovery)
 
-| Date | Project | Loop # | Discovered | Approved | Rate | Key Change |
-|------|---------|--------|------------|----------|------|------------|
-| - | - | - | - | - | - | - |
+*Searches*: 15 web searches across YouTube, TikTok, general web
+*Method*: Manual (Apify tools unavailable)
+*Results*: 6 creators identified, 4 viable for outreach
+
+### What Worked
+- *OpenClaw-specific searches* yielded strong results (Nat Eliason, freeCodeCamp coverage)
+- *"Vibe coding" trend search* found Alex Finn (55k YT subs, perfect fit)
+- *Established creators* (Fireship, ThePrimeagen) cover the topic but may be expensive
+- *Web search* as fallback when Apify unavailable works, but time-intensive
+
+### What Didn't Work
+- *Apify MCP tools* - All returned 404 errors (API endpoint configuration issue)
+- *TSG backend API* - Access denied, likely auth/API key issue for this group
+- *Generic searches* ("AI Jason", "Generait") - No specific creators found
+- *TikTok creator identification* - Found trend but no specific handles extracted
+
+### Technical Issues
+- Apify MCP: `404 - page-not-found` on all search endpoints
+- Backend API: `You do not have access to this project` error
+- Impact: No automated enrichment, email finding, or AI pre-review
+- Manual discovery took ~2 hours vs estimated 15 min automated
+
+### Key Insights
+1. *OpenClaw is MASSIVE* in Q1 2026 - "most hyped AI application of the year"
+2. *Vibe coding* is established term (Andrej Karpathy, 2025) with dedicated audience
+3. *Business automation* angle (not just devs) may be stronger for OpenClaw content
+4. *Mid-tier creators* (50k-500k) seem most accessible vs mega-channels
+
+### Search Term Performance
+*High performers*:
+- "OpenClaw tutorial YouTube" ✅
+- "vibe coding" creators ✅
+- "Cursor vs Claude Code" ✅
+
+*Low performers*:
+- "Generait AI" ❌ (channel doesn't exist?)
+- "AI Jason" ❌ (website exists, no clear YouTube channel)
+- Generic "clawdbot review" ❌ (tool reviews, not creators)
+
+### Recommended Adjustments
+
+*Add to searches.md*:
+- "OpenClaw business automation" (YouTube)
+- "build apps with Claude Code" (YouTube)
+- #vibecoding (TikTok)
+- #openclaw (TikTok)
+- "built with Kilo Code" (Twitter/X)
+
+*Consider removing*:
+- "Generait" searches (no results after multiple attempts)
+
+*New platform to explore*:
+- Substack newsletters covering AI coding tools
+- Search: `site:substack.com/p/ "cursor" OR "claude code" OR "openclaw"`
+
+### Next Actions
+1. *Fix technical issues*: Apify MCP & backend API access
+2. *Manual enrichment*: Get YouTube URLs, subscriber counts, emails for 4 viable creators
+3. *Newsletter search*: Add Substack/Beehiiv to discovery platforms
+4. *TikTok deep dive*: Identify specific IndieHackers creators using #openclaw
 
 ---
 
-## Entries
-
-<!-- Entries will be added below by /discovery-loop and /learn commands -->
-## 2026-03-13 19:34 UTC: Sync Test
-
-**What happened:** Git sync configured
-**What I learned:** Deploy key authentication working
-**Action taken:** Initial sync test
+(Future entries will be added here)
