@@ -167,10 +167,13 @@ async function runApifyActor(
   const waitSecs = options.waitSecs || 120;
   const memoryMbytes = options.memoryMbytes || 256;
 
+  // Convert actor ID format: "username/actor" -> "username~actor" for API
+  const apiActorId = actorId.replace('/', '~');
+
   try {
     // Start the actor run
     const runResponse = await fetch(
-      `${APIFY_API_BASE}/acts/${actorId}/runs?token=${APIFY_TOKEN}&waitForFinish=${waitSecs}`,
+      `${APIFY_API_BASE}/acts/${apiActorId}/runs?token=${APIFY_TOKEN}&waitForFinish=${waitSecs}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,7 +260,7 @@ Cost: ~$0.02 per 10 results. Use maxResults to control costs.`,
     }
 
     const result = await runApifyActor(ACTORS.youtube_search, {
-      searchKeywords: [args.query],
+      searchKeywords: args.query,  // String, not array
       maxResults: args.maxResults,
       sortBy: args.sortBy,
       uploadDate: args.uploadedAfter ? 'custom' : undefined,
@@ -706,7 +709,7 @@ Use this AFTER apify_scrape_profile if no email was found in the profile.`,
       const budget = checkBudget(0);
       if (budget.allowed) {
         const result = await runApifyActor(ACTORS.linktree_email, {
-          urls: [args.linktreeUrl],
+          startUrls: [{ url: args.linktreeUrl }],
         }, { waitSecs: 30 });
 
         if (result.success && result.data?.[0]) {
@@ -740,8 +743,9 @@ Use this AFTER apify_scrape_profile if no email was found in the profile.`,
       providersTriled.push('tiktok_email');
       const budget = checkBudget(COST_ESTIMATES.email_lookup);
       if (budget.allowed) {
+        const handle = args.handle.replace('@', '');
         const result = await runApifyActor(ACTORS.tiktok_email, {
-          profiles: [args.handle.replace('@', '')],
+          startUrls: [{ url: `https://www.tiktok.com/@${handle}` }],
         }, { waitSecs: 60 });
 
         totalCost += result.cost || COST_ESTIMATES.email_lookup;

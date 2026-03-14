@@ -115,6 +115,11 @@ echo "Building agent container..."
 mkdir -p /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 chown -R 1000:1000 /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 
+# Fix group directory permissions so agent can edit CLAUDE.md and workspace files
+for group_dir in /opt/nanoclaw/groups/*/; do
+    chown -R 1000:1000 "\$group_dir"
+done
+
 # Seed workspace if it doesn't exist (never overwrite existing)
 for group_dir in /opt/nanoclaw/groups/*/; do
     group_name=\$(basename "\$group_dir")
