@@ -527,9 +527,11 @@ async function main(): Promise<void> {
   // These are intentionally exposed to subprocesses so api.ts can use them
   if (containerInput.secrets?.TSG_BACKEND_URL) {
     process.env.TSG_API_URL = containerInput.secrets.TSG_BACKEND_URL;
+    sdkEnv.TSG_API_URL = containerInput.secrets.TSG_BACKEND_URL;
   }
   if (containerInput.secrets?.TSG_API_KEY) {
     process.env.TSG_API_KEY = containerInput.secrets.TSG_API_KEY;
+    sdkEnv.TSG_API_KEY = containerInput.secrets.TSG_API_KEY;
   }
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

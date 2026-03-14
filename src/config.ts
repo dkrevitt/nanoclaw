@@ -18,6 +18,11 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 const PROJECT_ROOT = process.cwd();
 const HOME_DIR = process.env.HOME || '/Users/user';
 
+// Docker-in-Docker: when NanoClaw runs in a container, volume mounts need
+// to use host paths, not container paths. Set HOST_PATH_PREFIX to the host
+// path that maps to PROJECT_ROOT (e.g., /opt/nanoclaw when PROJECT_ROOT=/app)
+export const HOST_PATH_PREFIX = process.env.HOST_PATH_PREFIX || '';
+
 // Mount security: allowlist stored OUTSIDE project root, never mounted into containers
 export const MOUNT_ALLOWLIST_PATH = path.join(
   HOME_DIR,

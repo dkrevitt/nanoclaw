@@ -33,8 +33,10 @@ COPY container/ ./container/
 # Create directories
 RUN mkdir -p data groups store
 
-# Run as non-root
-RUN useradd -m nanoclaw && chown -R nanoclaw:nanoclaw /app
+# Run as non-root with docker group access (GID 999 matches DigitalOcean host)
+RUN groupadd -g 999 docker && \
+    useradd -m -G docker nanoclaw && \
+    chown -R nanoclaw:nanoclaw /app
 USER nanoclaw
 
 CMD ["node", "dist/index.js"]

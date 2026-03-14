@@ -13,6 +13,7 @@ import {
   CONTAINER_TIMEOUT,
   DATA_DIR,
   GROUPS_DIR,
+  HOST_PATH_PREFIX,
   IDLE_TIMEOUT,
 } from './config.js';
 import { readEnvFile } from './env.js';
@@ -32,6 +33,20 @@ function getHomeDir(): string {
     );
   }
   return home;
+}
+
+/**
+ * Translate container paths to host paths for Docker-in-Docker scenarios.
+ * When HOST_PATH_PREFIX is set (e.g., /opt/nanoclaw), paths like /app/groups
+ * become /opt/nanoclaw/groups for proper volume mounting.
+ */
+function toHostPath(containerPath: string): string {
+  if (!HOST_PATH_PREFIX) return containerPath;
+  const projectRoot = process.cwd();
+  if (containerPath.startsWith(projectRoot)) {
+    return HOST_PATH_PREFIX + containerPath.slice(projectRoot.length);
+  }
+  return containerPath;
 }
 
 export interface ContainerInput {
@@ -223,15 +238,30 @@ function readSecrets(): Record<string, string> {
   return result;
 }
 
-function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
+function buildContainerArgs(
+  mounts: VolumeMount[],
+  containerName: string,
+  secrets?: Record<string, string>,
+): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
+  // Pass TSG env vars via Docker -e flags so they're inherited by bash subprocesses
+  // (stdin secrets only reach the Node process, not spawned commands)
+  if (secrets?.TSG_API_KEY) {
+    args.push('-e', `TSG_API_KEY=${secrets.TSG_API_KEY}`);
+  }
+  if (secrets?.TSG_BACKEND_URL) {
+    args.push('-e', `TSG_API_URL=${secrets.TSG_BACKEND_URL}`);
+  }
+
   // Docker: -v with :ro suffix for readonly
+  // Use toHostPath for Docker-in-Docker scenarios
   for (const mount of mounts) {
+    const hostPath = toHostPath(mount.hostPath);
     if (mount.readonly) {
-      args.push('-v', `${mount.hostPath}:${mount.containerPath}:ro`);
+      args.push('-v', `${hostPath}:${mount.containerPath}:ro`);
     } else {
-      args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
+      args.push('-v', `${hostPath}:${mount.containerPath}`);
     }
   }
 
@@ -254,7 +284,9 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  // Read secrets early so we can pass TSG env vars to Docker -e flags
+  const secrets = readSecrets();
+  const containerArgs = buildContainerArgs(mounts, containerName, secrets);
 
   logger.debug(
     {
@@ -295,7 +327,8 @@ export async function runContainerAgent(
     let stderrTruncated = false;
 
     // Pass secrets via stdin (never written to disk or mounted as files)
-    input.secrets = readSecrets();
+    // Note: secrets already read above for Docker -e flags
+    input.secrets = secrets;
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs

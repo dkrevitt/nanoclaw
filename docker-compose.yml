@@ -13,10 +13,13 @@ services:
       - ./groups:/app/groups
       # WhatsApp auth state
       - ./store:/app/store
+      # Mount allowlist config (security: keeps allowlist outside project root)
+      - /home/nanoclaw/.config/nanoclaw:/home/nanoclaw/.config/nanoclaw:ro
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      - HOST_PATH_PREFIX=/opt/nanoclaw
     # No ports needed - WhatsApp uses outbound connections only
     # For Slack/Telegram webhooks, uncomment:
     # ports:
