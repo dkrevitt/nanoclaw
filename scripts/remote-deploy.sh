@@ -24,6 +24,8 @@ SLACK_BOT_TOKEN=$(grep "^SLACK_BOT_TOKEN=" .env | cut -d= -f2-)
 SLACK_APP_TOKEN=$(grep "^SLACK_APP_TOKEN=" .env | cut -d= -f2-)
 TSG_BACKEND_URL=$(grep "^TSG_BACKEND_URL=" .env | cut -d= -f2-)
 TSG_API_KEY=$(grep "^TSG_API_KEY=" .env | cut -d= -f2-)
+APIFY_TOKEN=$(grep "^APIFY_TOKEN=" .env | cut -d= -f2-)
+APIFY_DAILY_BUDGET=$(grep "^APIFY_DAILY_BUDGET=" .env | cut -d= -f2-)
 
 # Need either OAuth token or API key
 if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
@@ -113,9 +115,18 @@ echo "Building agent container..."
 mkdir -p /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 chown -R 1000:1000 /opt/nanoclaw/data/sessions /opt/nanoclaw/data/ipc
 
-# Ensure workspace directories exist (preserved across deploys)
+# Seed workspace if it doesn't exist (never overwrite existing)
 for group_dir in /opt/nanoclaw/groups/*/; do
-    mkdir -p "\${group_dir}workspace"
+    group_name=\$(basename "\$group_dir")
+    workspace_dir="\${group_dir}workspace"
+
+    if [ ! -d "\$workspace_dir" ] || [ -z "\$(ls -A "\$workspace_dir" 2>/dev/null)" ]; then
+        echo "Seeding workspace for \$group_name (empty or missing)..."
+        mkdir -p "\$workspace_dir"
+        # Will be seeded by separate scp if local has content
+    else
+        echo "Preserving existing workspace for \$group_name"
+    fi
 done
 
 # Create systemd service with environment variables
@@ -133,7 +144,7 @@ Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
 Environment=HOME=/root
-Environment=ASSISTANT_NAME=TSG Discovery
+Environment="ASSISTANT_NAME=TSG Discovery"
 Environment=DISABLE_WHATSAPP=1
 SERVICEEOF
 
@@ -151,6 +162,12 @@ if [ -n "$TSG_BACKEND_URL" ]; then
 fi
 if [ -n "$TSG_API_KEY" ]; then
     echo "Environment=TSG_API_KEY=$TSG_API_KEY" >> /etc/systemd/system/nanoclaw.service
+fi
+if [ -n "$APIFY_TOKEN" ]; then
+    echo "Environment=APIFY_TOKEN=$APIFY_TOKEN" >> /etc/systemd/system/nanoclaw.service
+fi
+if [ -n "$APIFY_DAILY_BUDGET" ]; then
+    echo "Environment=APIFY_DAILY_BUDGET=$APIFY_DAILY_BUDGET" >> /etc/systemd/system/nanoclaw.service
 fi
 
 # Add install section
@@ -252,6 +269,29 @@ echo "View logs: journalctl -u nanoclaw -f"
 echo "Sync timer: systemctl status nanoclaw-sync.timer"
 REMOTE_SCRIPT
 
+# Seed workspace directories that are empty on DO but have content locally
+echo ""
+echo "Checking if workspace needs seeding..."
+for group_dir in groups/*/; do
+    group_name=$(basename "$group_dir")
+    local_workspace="$group_dir/workspace"
+
+    if [ -d "$local_workspace" ] && [ -n "$(ls -A "$local_workspace" 2>/dev/null)" ]; then
+        # Check if remote workspace is empty
+        remote_empty=$(ssh "$USER@$IP" "[ -z \"\$(ls -A /opt/nanoclaw/groups/$group_name/workspace 2>/dev/null)\" ] && echo 'yes' || echo 'no'")
+
+        if [ "$remote_empty" = "yes" ]; then
+            echo "Seeding workspace for $group_name..."
+            scp -r "$local_workspace"/* "$USER@$IP:/opt/nanoclaw/groups/$group_name/workspace/"
+            ssh "$USER@$IP" "chown -R 1000:1000 /opt/nanoclaw/groups/$group_name/workspace"
+        else
+            echo "Workspace for $group_name already has content, skipping"
+        fi
+    fi
+done
+
 echo ""
 echo "=== Done ==="
 echo "SSH in and check logs: ssh $USER@$IP 'journalctl -u nanoclaw -f'"
+echo ""
+echo "To pull workspace changes back: ./scripts/pull-workspace.sh $IP"
