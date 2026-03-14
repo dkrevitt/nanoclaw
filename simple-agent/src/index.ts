@@ -65,6 +65,8 @@ async function runAgent(prompt: string, sessionId?: string): Promise<string> {
   let result = '';
   let newSessionId: string | undefined;
 
+  console.log('Running agent with prompt:', prompt.slice(0, 100));
+
   try {
     for await (const msg of query({
       prompt,
@@ -87,13 +89,17 @@ async function runAgent(prompt: string, sessionId?: string): Promise<string> {
         mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
       },
     })) {
+      console.log('Agent message:', msg.type, msg.subtype || '');
       if (msg.type === 'result') {
         result = msg.result || '';
+        console.log('Agent result:', result.slice(0, 200));
       }
       if (msg.type === 'system' && msg.subtype === 'init') {
         newSessionId = msg.session_id;
+        console.log('Session ID:', newSessionId);
       }
     }
+    console.log('Agent finished, result length:', result.length);
   } catch (err) {
     console.error('Agent error:', err);
     result = `Error: ${err instanceof Error ? err.message : String(err)}`;
