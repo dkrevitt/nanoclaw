@@ -1,31 +1,24 @@
 # Active Scheduled Tasks
 
-Last updated: 2026-03-14 01:55 UTC
+Last updated: 2026-03-14 02:10 UTC
 
-## Content-Biz Group Tasks
+## Discovery Heartbeat Tasks
 
 ### 1. YouTube + Twitter Discovery (3-Hour Heartbeat)
-- **Task ID:** `1773453115062-dzssb9`
+- **Task ID:** `task-1773453115690-szsmfd`
 - **Schedule:** `0 */3 * * *` (every 3 hours at :00 minutes)
-- **Next runs:** 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00, 0:00
+- **Next run:** 2026-03-14 03:00:00 UTC
 - **Platforms:** YouTube, Twitter
 - **Strategy:** Use date filtering (`uploadedAfter`, `since`) to only process new content since last execution
 - **Status:** ✅ Active
 
 ### 2. TikTok + Instagram Discovery (Daily Heartbeat)
-- **Task ID:** `1773453120583-707nms`
-- **Schedule:** `0 9 * * *` (daily at 9:00 AM)
+- **Task ID:** `task-1773453120701-tlnwfe`
+- **Schedule:** `0 9 * * *` (daily at 9:00 AM UTC)
+- **Next run:** 2026-03-14 09:00:00 UTC
 - **Platforms:** TikTok, Instagram
 - **Strategy:** Broader searches with aggressive post-filtering (no API date filtering available)
 - **Status:** ✅ Active
-
-## Old Task Status
-
-### Kilo Code Discovery Loop (DEPRECATED)
-- **Task ID:** `task-1773421955289-4czqxt`
-- **Description:** "Run the discovery loop for Kilo Code / OpenClaw me..."
-- **Status:** Cancellation requested, may be in different group context
-- **Note:** This task has been superseded by the new platform-specific heartbeats above
 
 ## Execution Strategy
 
