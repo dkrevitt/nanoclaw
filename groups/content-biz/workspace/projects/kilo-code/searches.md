@@ -17,16 +17,29 @@
 | twitter | "clawdbot" | Alias |
 | instagram | "openclaw" | Direct mentions |
 
+## Standard - Claude Code
+
+| Platform | Query | Notes |
+|----------|-------|-------|
+| youtube | "claude code" | Direct competitor |
+| youtube | "claude code tutorial" | Tutorial content |
+| youtube | "claude code review" | Review content |
+| twitter | "claude code" | General mentions |
+| twitter | "cursor vs claude code" | Comparison discussions |
+| tiktok | "#claudecode" | Hashtag version |
+
 ## Standard - Coding Agents
 
 | Platform | Query | Notes |
 |----------|-------|-------|
 | youtube | "cursor ide review" | Competitor reviews |
-| youtube | "claude code tutorial" | Competitor tutorials |
 | youtube | "ai coding agent comparison" | Comparison content |
+| youtube | "ai coding benchmarks" | Benchmark content |
+| youtube | "coding agent benchmarks" | Benchmark content |
+| twitter | "ai coding benchmarks" | Benchmark discussions |
+| twitter | "swebench" | Popular coding benchmark |
 | tiktok | "#aicoding" | General AI coding |
 | tiktok | "#cursorai" | Competitor hashtag |
-| twitter | "cursor vs claude code" | Comparison discussions |
 
 ## Testing
 
