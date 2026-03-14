@@ -58,6 +58,7 @@ async function runAgent(prompt: string, sessionId?: string): Promise<string> {
       env: {
         APIFY_TOKEN,
         APIFY_DAILY_BUDGET: process.env.APIFY_DAILY_BUDGET || '5.00',
+        WORKSPACE_DIR,
       },
     };
   }

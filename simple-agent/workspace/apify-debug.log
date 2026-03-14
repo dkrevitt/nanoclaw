@@ -1,0 +1,10 @@
+[2026-03-14T06:20:06.522Z] [INFO] Apify MCP server starting {"hasToken":true,"budget":20,"workspaceDir":"/Users/davidkrevitt/code/nanoclaw/simple-agent/workspace"}
+[2026-03-14T06:20:10.080Z] [INFO] Running actor: streamers/youtube-scraper {"input":{"searchKeywords":"OpenClaw","maxResults":20,"sortBy":"date","uploadDate":"custom","uploadDateAfter":"2026-03-11T00:00:00Z"},"options":{}}
+[2026-03-14T06:20:10.080Z] [DEBUG] API URL: https://api.apify.com/v2/acts/streamers~youtube-scraper/runs?token=apify_ap...&waitForFinish=120
+[2026-03-14T06:20:11.478Z] [DEBUG] Response status: 201
+[2026-03-14T06:22:03.618Z] [INFO] Apify MCP server starting {"hasToken":true,"budget":20,"workspaceDir":"/Users/davidkrevitt/code/nanoclaw/simple-agent/workspace"}
+[2026-03-14T06:22:06.920Z] [INFO] Running actor: streamers/youtube-scraper {"input":{"searchKeywords":"OpenClaw","maxResults":20,"sortBy":"date","uploadDate":"custom","uploadDateAfter":"2026-03-11T00:00:00Z"},"options":{}}
+[2026-03-14T06:22:06.920Z] [DEBUG] API URL: https://api.apify.com/v2/acts/streamers~youtube-scraper/runs?token=apify_ap...&waitForFinish=120
+[2026-03-14T06:22:08.451Z] [DEBUG] Response status: 201
+[2026-03-14T06:23:03.182Z] [DEBUG] Run status: SUCCEEDED {"runId":"4LDgWBhMeCGfTOSVo","datasetId":"DwNqGJv5qEQcje0p8","usageUsd":0.046799999999999994}
+[2026-03-14T06:23:03.296Z] [INFO] Actor completed successfully {"actor":"streamers/youtube-scraper","resultCount":20,"usageUsd":0.046799999999999994}

@@ -1,0 +1,15 @@
+{
+  "date": "2026-03-14",
+  "totalCost": 0.046799999999999994,
+  "searches": 1,
+  "profiles": 0,
+  "emails": 0,
+  "runs": [
+    {
+      "timestamp": "2026-03-14T06:23:03.297Z",
+      "actor": "streamers/youtube-scraper",
+      "cost": 0.046799999999999994,
+      "resultCount": 20
+    }
+  ]
+}

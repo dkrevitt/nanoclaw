@@ -17,12 +17,34 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Environment configuration
 const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
 const APIFY_DAILY_BUDGET = parseFloat(process.env.APIFY_DAILY_BUDGET || '5.00');
-const WORKSPACE_DIR = '/workspace/group';
+const WORKSPACE_DIR = process.env.WORKSPACE_DIR || path.join(__dirname, '..', '..', 'workspace');
 const USAGE_FILE = path.join(WORKSPACE_DIR, 'apify-usage.json');
+const LOG_FILE = path.join(WORKSPACE_DIR, 'apify-debug.log');
+
+// File-based logging (MCP uses stdio, so we can't use console.log)
+function log(level: 'INFO' | 'ERROR' | 'DEBUG', message: string, data?: any): void {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] [${level}] ${message}${data ? ' ' + JSON.stringify(data) : ''}\n`;
+  try {
+    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+    fs.appendFileSync(LOG_FILE, logLine);
+  } catch {
+    // Ignore logging errors
+  }
+}
+
+log('INFO', 'Apify MCP server starting', {
+  hasToken: !!APIFY_TOKEN,
+  budget: APIFY_DAILY_BUDGET,
+  workspaceDir: WORKSPACE_DIR
+});
 
 // Apify API base URL
 const APIFY_API_BASE = 'https://api.apify.com/v2';
@@ -160,7 +182,10 @@ async function runApifyActor(
   input: Record<string, any>,
   options: { waitSecs?: number; memoryMbytes?: number } = {}
 ): Promise<ApifyRunResult> {
+  log('INFO', `Running actor: ${actorId}`, { input, options });
+
   if (!APIFY_TOKEN) {
+    log('ERROR', 'APIFY_TOKEN not set');
     return { success: false, error: 'APIFY_TOKEN not set' };
   }
 
@@ -169,6 +194,8 @@ async function runApifyActor(
 
   // Convert actor ID format: "username/actor" -> "username~actor" for API
   const apiActorId = actorId.replace('/', '~');
+  const url = `${APIFY_API_BASE}/acts/${apiActorId}/runs?token=${APIFY_TOKEN.slice(0, 8)}...&waitForFinish=${waitSecs}`;
+  log('DEBUG', `API URL: ${url.replace(APIFY_TOKEN, '***')}`);
 
   try {
     // Start the actor run
@@ -184,23 +211,38 @@ async function runApifyActor(
       }
     );
 
+    log('DEBUG', `Response status: ${runResponse.status}`);
+
     if (!runResponse.ok) {
       const text = await runResponse.text();
+      log('ERROR', `Apify API error: ${runResponse.status}`, { body: text.slice(0, 500) });
       return { success: false, error: `Apify API error: ${runResponse.status} - ${text}` };
     }
 
     const runData = await runResponse.json();
+    log('DEBUG', `Run status: ${runData.data?.status}`, {
+      runId: runData.data?.id,
+      datasetId: runData.data?.defaultDatasetId,
+      usageUsd: runData.data?.usageTotalUsd
+    });
 
     if (runData.data?.status !== 'SUCCEEDED') {
+      const errorInfo = {
+        status: runData.data?.status,
+        statusMessage: runData.data?.statusMessage,
+        errorMessage: runData.data?.errorMessage,
+      };
+      log('ERROR', `Actor run failed`, errorInfo);
       return {
         success: false,
-        error: `Actor run failed with status: ${runData.data?.status}`,
+        error: `Actor run failed with status: ${runData.data?.status}. ${runData.data?.statusMessage || ''} ${runData.data?.errorMessage || ''}`.trim(),
       };
     }
 
     // Fetch the results from the dataset
     const datasetId = runData.data?.defaultDatasetId;
     if (!datasetId) {
+      log('ERROR', 'No dataset ID returned');
       return { success: false, error: 'No dataset ID returned' };
     }
 
@@ -209,10 +251,16 @@ async function runApifyActor(
     );
 
     if (!dataResponse.ok) {
+      log('ERROR', `Failed to fetch dataset: ${dataResponse.status}`);
       return { success: false, error: 'Failed to fetch dataset' };
     }
 
     const items = await dataResponse.json();
+    log('INFO', `Actor completed successfully`, {
+      actor: actorId,
+      resultCount: items?.length || 0,
+      usageUsd: runData.data?.usageTotalUsd
+    });
 
     // Calculate approximate cost from usage
     const usageUsd = runData.data?.usageTotalUsd || 0;
@@ -223,9 +271,11 @@ async function runApifyActor(
       cost: usageUsd,
     };
   } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    log('ERROR', `Request failed: ${errorMsg}`, { stack: err instanceof Error ? err.stack : undefined });
     return {
       success: false,
-      error: `Request failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Request failed: ${errorMsg}`,
     };
   }
 }

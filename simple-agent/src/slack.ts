@@ -79,6 +79,7 @@ export class SlackBot {
   private setupHandlers(): void {
     // Handle all messages in the configured channel
     this.app.message(async ({ message, client }) => {
+      console.log('DEBUG: Received message event:', JSON.stringify(message).slice(0, 200));
       // Type guard for regular messages
       if (!('user' in message) || !('text' in message)) return;
       // Ignore bot messages
